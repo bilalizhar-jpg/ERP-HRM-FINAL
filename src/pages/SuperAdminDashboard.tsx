@@ -6,7 +6,12 @@ import { motion } from 'framer-motion';
 export default function SuperAdminDashboard() {
   const [stats] = useState({ users: null, subscriptions: null, requests: null });
   const [loading, setLoading] = useState(true);
-  const [dbStatus, setDbStatus] = useState<{ status: string; message: string } | null>(null);
+  const [dbStatus, setDbStatus] = useState<{ 
+    status: string; 
+    message: string;
+    tables?: string[];
+    isInitialized?: boolean;
+  } | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -74,6 +79,7 @@ export default function SuperAdminDashboard() {
             className={`mb-8 p-5 rounded-2xl border flex items-start gap-4 shadow-sm ${
               dbStatus.status === 'connected' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
               dbStatus.status === 'not_configured' ? 'bg-amber-50 border-amber-200 text-amber-800' : 
+              dbStatus.status === 'auth_error' ? 'bg-rose-50 border-rose-200 text-rose-800' :
               'bg-rose-50 border-rose-200 text-rose-800'
             }`}
           >
@@ -98,6 +104,64 @@ export default function SuperAdminDashboard() {
                 <span className="font-bold text-lg">Database Status: {dbStatus.status.replace('_', ' ').toUpperCase()}</span>
               </div>
               <p className="text-sm mt-1 opacity-90">{dbStatus.message}</p>
+              
+              {dbStatus.status === 'connected' && dbStatus.tables && dbStatus.tables.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {dbStatus.tables.map((table: string) => (
+                    <span key={table} className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-mono border border-emerald-200 uppercase">
+                      {table}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-3">
+                <button 
+                  onClick={() => {
+                    setLoading(true);
+                    setDbStatus(null);
+                    window.location.reload();
+                  }}
+                  className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-bold transition-colors border border-current"
+                >
+                  Retry Connection
+                </button>
+                
+                {dbStatus.status === 'connected' && !dbStatus.isInitialized && (
+                  <button 
+                    onClick={async () => {
+                      try {
+                        setLoading(true);
+                        const res = await fetch('/api/init-db', { method: 'POST' });
+                        const data = await res.json();
+                        if (data.success) {
+                          window.location.reload();
+                        } else {
+                          alert("Failed to initialize: " + data.message);
+                        }
+                      } catch {
+                        alert("Error initializing database");
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"
+                  >
+                    Initialize Database Tables
+                  </button>
+                )}
+              </div>
+              {dbStatus.status === 'auth_error' && (
+                <div className="mt-4 p-4 bg-white/50 rounded-xl border border-rose-200 text-rose-900 text-xs space-y-2">
+                  <p className="font-bold uppercase tracking-wider">Troubleshooting Steps:</p>
+                  <ul className="list-disc ml-4 space-y-1">
+                    <li>Verify <strong>DB_PASSWORD</strong> in Settings &gt; Secrets matches the one you set in Hostinger.</li>
+                    <li>Ensure <strong>DB_USER</strong> is exactly <code>u298840747_erp</code>.</li>
+                    <li>Double-check that <strong>Any Host</strong> is still enabled in Hostinger hPanel &gt; Remote MySQL.</li>
+                    <li>Try resetting the database password in Hostinger and updating it in AI Studio.</li>
+                  </ul>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
