@@ -92,12 +92,12 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = __dirname; 
+    const distPath = path.resolve(__dirname); 
     console.log(`Serving static files from: ${distPath}`);
     app.use(express.static(distPath));
     
-    app.get('*', (req, res) => {
-      const indexPath = path.join(distPath, 'index.html');
+    app.get('*all', (req, res) => {
+      const indexPath = path.resolve(distPath, 'index.html');
       res.sendFile(indexPath, (err) => {
         if (err) {
           console.error(`Error sending index.html: ${err.message}`);
