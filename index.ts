@@ -1,11 +1,19 @@
 import express from "express";
 import path from "path";
+import { fileURLToPath } from "url";
 import nodemailer from "nodemailer";
 import db from "./src/db";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
+
+  console.log("Starting server...");
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log(`Port: ${PORT}`);
 
   app.use(express.json());
 
@@ -100,10 +108,20 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    // In production, index.js is inside the dist folder
+    const distPath = __dirname; 
+    console.log(`Serving static files from: ${distPath}`);
+    
     app.use(express.static(distPath));
+    
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error(`Error sending index.html: ${err.message}`);
+          res.status(500).send("Server Error: Could not load frontend.");
+        }
+      });
     });
   }
 
