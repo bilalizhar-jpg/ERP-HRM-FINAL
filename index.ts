@@ -19,15 +19,29 @@ async function startServer() {
 
   // API routes
   app.get("/api/db-health", async (req, res) => {
-    if (!process.env.DB_HOST) {
-      return res.json({ status: "not_configured", message: "DB_HOST is not set in environment variables." });
+    if (!process.env.DB_HOST || process.env.DB_HOST === '') {
+      return res.json({ 
+        status: "not_configured", 
+        message: "DB_HOST is not set. Please add your Hostinger MySQL host in Settings > Secrets." 
+      });
     }
     try {
       const connection = await db.getConnection();
       connection.release();
       res.json({ status: "connected", message: "Successfully connected to the database." });
     } catch (error) {
-      res.status(500).json({ status: "error", message: error instanceof Error ? error.message : String(error) });
+      const errMessage = error instanceof Error ? error.message : String(error);
+      let status = "error";
+      let message = errMessage;
+
+      if (errMessage.includes("ECONNREFUSED") && errMessage.includes("127.0.0.1")) {
+        status = "not_configured";
+        message = "The app is trying to connect to localhost (127.0.0.1). Please set your remote Hostinger DB_HOST in Settings.";
+      } else if (errMessage.includes("ETIMEDOUT")) {
+        message = "Connection timed out. Ensure Remote MySQL is enabled in Hostinger and your IP is allowed.";
+      }
+
+      res.status(500).json({ status, message });
     }
   });
 
@@ -112,16 +126,24 @@ async function startServer() {
     
     // Test database connection in the background
     if (process.env.DB_HOST) {
-      console.log("Testing database connection...");
+      console.log(`Testing connection to: ${process.env.DB_HOST}`);
       db.getConnection()
         .then(connection => {
-          console.log("Database connected successfully");
+          console.log("✅ Database connected successfully to Hostinger");
           connection.release();
         })
         .catch(error => {
-          console.error("Database connection failed. Check credentials in Settings.");
-          console.error("Error details:", error instanceof Error ? error.message : String(error));
+          const errMessage = error instanceof Error ? error.message : String(error);
+          console.error("❌ Database connection failed.");
+          if (errMessage.includes("ECONNREFUSED") && errMessage.includes("127.0.0.1")) {
+            console.error("TIP: The app is defaulting to localhost. Please set DB_HOST in Settings > Secrets to your Hostinger MySQL host.");
+          } else if (errMessage.includes("ETIMEDOUT")) {
+            console.error("TIP: Connection timed out. Make sure you have allowed remote access in Hostinger hPanel > Remote MySQL.");
+          }
+          console.error("Error details:", errMessage);
         });
+    } else {
+      console.warn("⚠️ DB_HOST is not set. Database features will be disabled until configured in Settings > Secrets.");
     }
   });
 }
