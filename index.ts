@@ -96,7 +96,7 @@ async function startServer() {
     console.log(`Serving static files from: ${distPath}`);
     app.use(express.static(distPath));
     
-    app.get('*all', (req, res) => {
+    app.get('(.*)', (req, res) => {
       const indexPath = path.resolve(distPath, 'index.html');
       res.sendFile(indexPath, (err) => {
         if (err) {
