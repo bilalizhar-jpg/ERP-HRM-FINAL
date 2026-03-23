@@ -1,0 +1,5 @@
+{
+  "name": "ERP System - hrd",
+  "description": "An ERP system built with React, Express, and MongoDB.",
+  "requestFramePermissions": []
+}
