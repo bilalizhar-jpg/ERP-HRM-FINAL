@@ -15,6 +15,8 @@ import Features from './components/Features';
 import Footer from './components/Footer';
 import ContactUs from './pages/ContactUs';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import SuperAdminLogin from './pages/SuperAdminLogin';
+import SuperAdminDashboard from './pages/SuperAdminDashboard';
 
 function Home() {
   return (
@@ -44,6 +46,8 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/contact-us" element={<ContactUs />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/super-admin" element={<SuperAdminLogin />} />
+        <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
       </Routes>
     </Router>
   )

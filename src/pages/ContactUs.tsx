@@ -7,10 +7,24 @@ export default function ContactUs() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // This is a placeholder for actual email sending logic.
-    // In a real app, this would call a backend API that uses a service like SendGrid, Mailgun, etc.
-    alert('Thank you for your message! We will get back to you at info@inforesumeedge.com soon.');
-    console.log('Sending email to info@inforesumeedge.com:', formData);
+    try {
+      const response = await fetch('/api/contact-us', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      if (response.ok) {
+        alert('Thank you for your message! We will get back to you soon.');
+        setFormData({ name: '', email: '', message: '' });
+      } else {
+        alert('Failed to send message. Please try again later.');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again later.');
+    }
   };
 
   return (

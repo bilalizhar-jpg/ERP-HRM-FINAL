@@ -8,12 +8,13 @@ export default function Hero() {
   const [startDate, setStartDate] = useState(new Date());
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [description, setDescription] = useState('');
 
   const handleSubmit = async () => {
     await fetch('/api/request-demo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, date: startDate }),
+      body: JSON.stringify({ name, email, description, date: startDate }),
     });
     setShowModal(false);
   };
@@ -60,6 +61,7 @@ export default function Hero() {
             <h2 className="text-2xl font-bold mb-4">Schedule a Demo</h2>
             <input type="text" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} className="w-full p-3 mb-4 border rounded-xl" />
             <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-3 mb-4 border rounded-xl" />
+            <textarea placeholder="Short Description" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full p-3 mb-4 border rounded-xl h-24" />
             <DatePicker selected={startDate} onChange={(date: Date | null) => date && setStartDate(date)} showTimeSelect className="w-full p-3 mb-4 border rounded-xl" />
             <div className="flex gap-4">
               <button onClick={handleSubmit} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold">Submit</button>

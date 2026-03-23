@@ -4,17 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "tsc -b && vite build",
+    "dev": "tsx index.ts",
+    "start": "node index.js",
+    "build": "tsc -b && vite build && esbuild index.ts --bundle --platform=node --format=esm --outfile=index.js --external:express --external:mysql2 --external:nodemailer --external:vite",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
     "@types/express": "^5.0.6",
     "@types/nodemailer": "^7.0.11",
+    "esbuild": "^0.27.4",
     "express": "^5.2.1",
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.577.0",
+    "mysql2": "^3.20.0",
     "nodemailer": "^8.0.3",
     "react": "^19.0.0",
     "react-datepicker": "^9.1.0",

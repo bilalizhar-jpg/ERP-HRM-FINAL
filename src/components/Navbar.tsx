@@ -32,7 +32,7 @@ export default function Navbar() {
               <button onClick={() => setShowModal(true)} className="text-slate-600 hover:text-blue-600 font-medium">Industries</button>
               <Link to="/contact-us" className="text-slate-600 hover:text-blue-600 font-medium">Contact</Link>
               <div className="flex items-center space-x-2 text-slate-400">
-                <a href="/login/super-admin" className="text-slate-600 hover:text-blue-600 font-medium">Super Admin</a>
+                <Link to="/super-admin" className="text-slate-600 hover:text-blue-600 font-medium">Super Admin</Link>
                 <span>|</span>
                 <a href="/login/admin-employer" className="text-slate-600 hover:text-blue-600 font-medium">Admin Employer</a>
                 <span>|</span>
