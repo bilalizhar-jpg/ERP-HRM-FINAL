@@ -1,32 +1,40 @@
 import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import { PrismaClient } from "./src/generated/prisma";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-
-dotenv.config();
-
-const prisma = new PrismaClient();
+import nodemailer from "nodemailer";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(cors());
   app.use(express.json());
 
-  // Connect to MSSQL via Prisma
-  try {
-    await prisma.$connect();
-    console.log("Connected to MSSQL via Prisma");
-  } catch (error) {
-    console.error("Error connecting to MSSQL:", error);
-  }
-
   // API routes
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+  app.post("/api/request-demo", async (req, res) => {
+    const { name, email, date } = req.body;
+
+    // Configure nodemailer
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    try {
+      await transporter.sendMail({
+        from: '"HRM & ERP Platform" <noreply@hrm-erp.com>',
+        to: "info@inforesumeedge.com",
+        subject: "New Demo Request",
+        text: `New demo request from ${name} (${email}) for ${date}.`,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, error: "Failed to send email" });
+    }
   });
 
   // Vite middleware for development

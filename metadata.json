@@ -1,5 +1,5 @@
 {
-  "name": "ERP System - hrd",
-  "description": "An ERP system built with React, Express, and MongoDB.",
+  "name": "multifunctionalHRM-ERP",
+  "description": "A multifunctional HRM and ERP platform for business operations.",
   "requestFramePermissions": []
 }
