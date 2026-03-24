@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Shield, Eye, EyeOff, User, Lock } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Shield, Eye, EyeOff, User, Lock, ArrowLeft } from 'lucide-react';
 
 export default function CompanyAdminLogin() {
   const [username, setUsername] = useState('');
@@ -35,7 +35,14 @@ export default function CompanyAdminLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center p-6 relative">
+      <Link 
+        to="/" 
+        className="absolute top-8 left-8 flex items-center gap-2 text-slate-500 hover:text-blue-600 font-bold text-sm transition-colors"
+      >
+        <ArrowLeft size={16} />
+        BACK TO HOME
+      </Link>
       <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-slate-100 w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200 mb-4">
