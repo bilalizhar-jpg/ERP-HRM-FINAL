@@ -25,6 +25,8 @@ import GmailIntegration from './pages/GmailIntegration';
 import WhatsAppIntegration from './pages/WhatsAppIntegration';
 import CompanyAdminLogin from './pages/CompanyAdminLogin';
 import CompanyAdminDashboard from './pages/CompanyAdminDashboard';
+import EmployeeLogin from './pages/EmployeeLogin';
+import EmployeeDashboard from './pages/EmployeeDashboard';
 
 function Home() {
   return (
@@ -64,6 +66,8 @@ function App() {
         <Route path="/super-admin/whatsapp" element={<WhatsAppIntegration />} />
         <Route path="/company-admin" element={<CompanyAdminLogin />} />
         <Route path="/company-admin/dashboard" element={<CompanyAdminDashboard />} />
+        <Route path="/employee" element={<EmployeeLogin />} />
+        <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
       </Routes>
     </Router>
   )

@@ -193,6 +193,23 @@ async function startServer() {
       )
     `);
 
+    // Create employees table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS employees (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        employee_id VARCHAR(50),
+        department VARCHAR(100),
+        designation VARCHAR(100),
+        status ENUM('active', 'inactive') DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
     // Insert default super admin if not exists
     const [existingAdmins] = await connection.query("SELECT * FROM admins WHERE email = 'admin@erp.com'") as [Record<string, unknown>[], unknown];
     if (existingAdmins.length === 0) {
@@ -249,6 +266,28 @@ async function startServer() {
         res.json({ success: true, company: companies[0] });
       } else {
         res.status(401).json({ success: false, message: "Invalid credentials" });
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Employee Login
+  app.post("/api/employee/login", async (req, res) => {
+    const { email, password } = req.body;
+    try {
+      const connection = await db.getConnection();
+      const [employees] = await connection.query(
+        "SELECT e.*, c.name as company_name FROM employees e JOIN companies c ON e.company_id = c.id WHERE e.email = ? AND e.password = ? AND e.status = 'active'",
+        [email, password]
+      ) as [Record<string, unknown>[], unknown];
+      connection.release();
+
+      if (employees.length > 0) {
+        res.json({ success: true, employee: employees[0] });
+      } else {
+        res.status(401).json({ success: false, message: "Invalid credentials or inactive account" });
       }
     } catch (error: unknown) {
       const err = error as Error;
