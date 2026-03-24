@@ -1,20 +1,31 @@
-import "dotenv/config";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import nodemailer from "nodemailer";
+import { google } from "googleapis";
+import { Connection } from "mysql2/promise";
 import db from "./src/db";
+import makeWASocket, { 
+  DisconnectReason, 
+  useMultiFileAuthState as getAuthState, 
+  fetchLatestBaileysVersion, 
+  makeCacheableSignalKeyStore
+} from "@whiskeysockets/baileys";
+import { Boom } from "@hapi/boom";
+import pino from "pino";
+import QRCode from "qrcode";
+import fs from "fs";
+import { join } from "path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
-  const environment = process.env.NODE_ENV ?? "development";
+  const PORT = process.env.PORT || 3000;
 
   console.log("Starting server...");
-  console.log(`Environment: ${environment}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
   console.log(`Port: ${PORT}`);
 
   app.use(express.json());
@@ -39,7 +50,7 @@ async function startServer() {
         status: "connected", 
         message: "Successfully connected to the database.",
         tables: tableList,
-        isInitialized: tableList.includes('admins')
+        isInitialized: tableList.includes('admins') && tableList.includes('invoices')
       });
     } catch (error: unknown) {
       const mysqlError = error as { message?: string; code?: string };
@@ -64,57 +75,507 @@ async function startServer() {
   });
 
   // Initialize database tables
+  async function initializeDatabase(connection: Connection) {
+    // Create admins table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS admins (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        name VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create users table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        name VARCHAR(255),
+        role ENUM('admin', 'user') DEFAULT 'user',
+        subscription_id INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create subscriptions table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_name VARCHAR(255) NOT NULL,
+        plan VARCHAR(50) NOT NULL,
+        status ENUM('active', 'expired', 'trial') DEFAULT 'trial',
+        expires_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create companies table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS companies (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        mobile VARCHAR(50),
+        unique_code VARCHAR(50) UNIQUE NOT NULL,
+        subsidiary VARCHAR(255),
+        head_office_location VARCHAR(255),
+        factory_location VARCHAR(255),
+        admin_username VARCHAR(255) UNIQUE NOT NULL,
+        admin_password VARCHAR(255) NOT NULL,
+        logo_url TEXT,
+        plan VARCHAR(50) DEFAULT 'Basic',
+        status ENUM('active', 'inactive', 'suspended') DEFAULT 'active',
+        license_status ENUM('valid', 'expired') DEFAULT 'valid',
+        gmail_tokens TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Ensure 'plan' column exists in companies (in case table was created before)
+    try {
+      await connection.query("ALTER TABLE companies ADD COLUMN plan VARCHAR(50) DEFAULT 'Basic'");
+    } catch {
+      // Column might already exist, ignore error
+    }
+
+    // Create invoices table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        invoice_number VARCHAR(50) UNIQUE NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        plan VARCHAR(50) NOT NULL,
+        status ENUM('paid', 'unpaid', 'cancelled') DEFAULT 'unpaid',
+        due_date DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create settings table for Gmail OAuth tokens
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        setting_key VARCHAR(255) UNIQUE NOT NULL,
+        setting_value TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create WhatsApp accounts table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS whatsapp_accounts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT UNIQUE NOT NULL,
+        status ENUM('connected', 'disconnected', 'connecting') DEFAULT 'disconnected',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create WhatsApp messages table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS whatsapp_messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        to_number VARCHAR(50) NOT NULL,
+        message TEXT NOT NULL,
+        status ENUM('pending', 'sent', 'failed') DEFAULT 'pending',
+        retries INT DEFAULT 0,
+        response_log TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Insert default super admin if not exists
+    const [existingAdmins] = await connection.query("SELECT * FROM admins WHERE email = 'admin@erp.com'") as [Record<string, unknown>[], unknown];
+    if (existingAdmins.length === 0) {
+      await connection.query("INSERT INTO admins (email, password, name) VALUES ('admin@erp.com', 'admin123', 'Super Admin')");
+    }
+  }
+
   app.post("/api/init-db", async (req, res) => {
     try {
       const connection = await db.getConnection();
-      
-      // Create admins table
-      await connection.query(`
-        CREATE TABLE IF NOT EXISTS admins (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          email VARCHAR(255) UNIQUE NOT NULL,
-          password VARCHAR(255) NOT NULL,
-          name VARCHAR(255),
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-
-      // Create users table
-      await connection.query(`
-        CREATE TABLE IF NOT EXISTS users (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          email VARCHAR(255) UNIQUE NOT NULL,
-          password VARCHAR(255) NOT NULL,
-          name VARCHAR(255),
-          role ENUM('admin', 'user') DEFAULT 'user',
-          subscription_id INT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-
-      // Create subscriptions table
-      await connection.query(`
-        CREATE TABLE IF NOT EXISTS subscriptions (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          company_name VARCHAR(255) NOT NULL,
-          plan VARCHAR(50) NOT NULL,
-          status ENUM('active', 'expired', 'trial') DEFAULT 'trial',
-          expires_at TIMESTAMP,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-
-      // Insert default super admin if not exists
-      const [existingAdmins] = await connection.query("SELECT * FROM admins WHERE email = 'admin@erp.com'") as [Record<string, unknown>[], unknown];
-      if (existingAdmins.length === 0) {
-        await connection.query("INSERT INTO admins (email, password, name) VALUES ('admin@erp.com', 'admin123', 'Super Admin')");
-      }
-
+      await initializeDatabase(connection);
       connection.release();
       res.json({ success: true, message: "Database initialized successfully." });
     } catch (error: unknown) {
       const err = error as Error;
+      console.error("Database initialization error:", err);
       res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Super Admin Stats
+  app.get("/api/super-admin/stats", async (req, res) => {
+    try {
+      const connection = await db.getConnection();
+      
+      const [totalResult] = await connection.query("SELECT COUNT(*) as count FROM companies") as [Record<string, unknown>[], unknown];
+      const [activeResult] = await connection.query("SELECT COUNT(*) as count FROM companies WHERE status = 'active'") as [Record<string, unknown>[], unknown];
+      const [expiredResult] = await connection.query("SELECT COUNT(*) as count FROM companies WHERE license_status = 'expired'") as [Record<string, unknown>[], unknown];
+      
+      connection.release();
+      res.json({
+        totalCompanies: totalResult[0].count,
+        activeCompanies: activeResult[0].count,
+        expiredLicenses: expiredResult[0].count
+      });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Company Admin Login
+  app.post("/api/company-admin/login", async (req, res) => {
+    const { username, password } = req.body;
+    try {
+      const connection = await db.getConnection();
+      const [companies] = await connection.query(
+        "SELECT * FROM companies WHERE admin_username = ? AND admin_password = ?",
+        [username, password]
+      ) as [Record<string, unknown>[], unknown];
+      connection.release();
+
+      if (companies.length > 0) {
+        res.json({ success: true, company: companies[0] });
+      } else {
+        res.status(401).json({ success: false, message: "Invalid credentials" });
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Create a new company
+  app.post("/api/companies", async (req, res) => {
+    const { 
+      name, email, mobile, unique_code, subsidiary, 
+      head_office_location, factory_location, 
+      admin_username, admin_password, logo_url, plan 
+    } = req.body;
+
+    console.log("Registering company:", { name, email, plan });
+
+    let connection;
+    try {
+      connection = await db.getConnection();
+      await connection.beginTransaction();
+      
+      // Auto-generate unique code if not provided
+      const finalUniqueCode = unique_code || `CMP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      
+      // Auto-generate admin credentials if not provided
+      const finalAdminUsername = admin_username || `${name.toLowerCase().replace(/\s+/g, '')}_admin`;
+      const finalAdminPassword = admin_password || Math.random().toString(36).substring(2, 10);
+
+      // Check if email or unique code already exists
+      const [existing] = await connection.query(
+        "SELECT email, unique_code FROM companies WHERE email = ? OR unique_code = ?",
+        [email, finalUniqueCode]
+      ) as [Record<string, unknown>[], unknown];
+
+      if (existing.length > 0) {
+        const isEmail = existing.some(e => e.email === email);
+        const isCode = existing.some(e => e.unique_code === finalUniqueCode);
+        await connection.rollback();
+        connection.release();
+        let msg = "A company with this email already exists.";
+        if (isCode && !isEmail) msg = "This unique code is already in use.";
+        if (isCode && isEmail) msg = "Both email and unique code are already in use.";
+        
+        return res.status(400).json({ 
+          success: false, 
+          message: msg
+        });
+      }
+
+      console.log("Inserting company into DB...");
+      const [result] = await connection.query(`
+        INSERT INTO companies (
+          name, email, mobile, unique_code, subsidiary, 
+          head_office_location, factory_location, 
+          admin_username, admin_password, logo_url, plan, status, license_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'valid')
+      `, [
+        name, email, mobile, finalUniqueCode, subsidiary, 
+        head_office_location, factory_location, 
+        finalAdminUsername, finalAdminPassword, logo_url, plan || 'Basic'
+      ]) as [import('mysql2').ResultSetHeader, unknown];
+
+      const companyId = result.insertId;
+      console.log("Company inserted with ID:", companyId);
+
+      // Auto-generate Invoice
+      const planPrices: Record<string, number> = {
+        'Basic': 40,
+        'Premium': 80,
+        'Enterprise': 100,
+        'Ultimate': 100
+      };
+      const amount = planPrices[plan] || 40;
+      const invoiceNumber = `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 7); // 7 days from now
+
+      console.log("Generating invoice...");
+      await connection.query(`
+        INSERT INTO invoices (company_id, invoice_number, amount, plan, due_date)
+        VALUES (?, ?, ?, ?, ?)
+      `, [companyId, invoiceNumber, amount, plan || 'Basic', dueDate]);
+      console.log("Invoice generated successfully.");
+
+      await connection.commit();
+      console.log("Transaction committed successfully");
+
+      res.json({ 
+        success: true, 
+        message: "Company registered and invoice generated successfully.",
+        credentials: {
+          username: finalAdminUsername,
+          password: finalAdminPassword,
+          code: finalUniqueCode
+        }
+      });
+    } catch (error: unknown) {
+      if (connection) await connection.rollback();
+      const err = error as Error;
+      console.error("Error in /api/companies:", err);
+      res.status(500).json({ success: false, message: "Server Error: " + err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  // List all invoices
+  app.get("/api/invoices", async (req, res) => {
+    try {
+      const connection = await db.getConnection();
+      const [invoices] = await connection.query(`
+        SELECT i.*, c.name as company_name, c.email as company_email 
+        FROM invoices i 
+        JOIN companies c ON i.company_id = c.id 
+        ORDER BY i.created_at DESC
+      `) as [Record<string, unknown>[], unknown];
+      connection.release();
+      res.json(invoices);
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Send invoice email
+  app.post("/api/invoices/:id/send", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const connection = await db.getConnection();
+      const [invoice] = await connection.query(`
+        SELECT i.*, c.name as company_name, c.email as company_email 
+        FROM invoices i 
+        JOIN companies c ON i.company_id = c.id 
+        WHERE i.id = ?
+      `, [id]) as [Record<string, unknown>[], unknown];
+      
+      if (invoice.length === 0) {
+        connection.release();
+        return res.status(404).json({ success: false, message: "Invoice not found" });
+      }
+
+      const companyId = invoice[0].company_id as number;
+      const companyEmail = invoice[0].company_email as string;
+      const invoiceNumber = invoice[0].invoice_number as string;
+      const amount = invoice[0].amount as number;
+
+      // Check if Company has its own Gmail connected
+      const [companyRows] = await connection.query("SELECT gmail_tokens FROM companies WHERE id = ?", [companyId]) as [Record<string, unknown>[], unknown];
+      
+      let tokens = null;
+      if (companyRows.length > 0 && companyRows[0].gmail_tokens) {
+        tokens = JSON.parse(companyRows[0].gmail_tokens as string);
+      } else {
+        // Fallback to global Gmail tokens
+        const [globalRows] = await connection.query("SELECT setting_value FROM settings WHERE setting_key = 'gmail_tokens'") as [Record<string, unknown>[], unknown];
+        if (globalRows.length > 0) {
+          tokens = JSON.parse(globalRows[0].setting_value as string);
+        }
+      }
+      
+      if (tokens) {
+        // Use Gmail API
+        const client = getOAuth2Client();
+        if (!client) {
+          connection.release();
+          return res.status(400).json({ success: false, message: "Gmail OAuth not configured" });
+        }
+        client.setCredentials(tokens);
+        const gmail = google.gmail({ version: "v1", auth: client });
+        
+        const oauth2 = google.oauth2({ version: "v2", auth: client });
+        const userInfo = await oauth2.userinfo.get();
+        const userEmail = userInfo.data.email;
+
+        const subject = `Invoice ${invoiceNumber} from HRM & ERP Platform`;
+        const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString("base64")}?=`;
+        const messageParts = [
+          `From: HRM & ERP Platform <${userEmail}>`,
+          `To: ${companyEmail}`,
+          `Content-Type: text/html; charset=utf-8`,
+          `MIME-Version: 1.0`,
+          `Subject: ${utf8Subject}`,
+          "",
+          `Hello ${invoice[0].company_name},`,
+          "<br><br>",
+          `Please find your invoice details below:`,
+          "<br>",
+          `<b>Invoice Number:</b> ${invoiceNumber}`,
+          "<br>",
+          `<b>Amount Due:</b> $${amount.toFixed(2)}`,
+          "<br>",
+          `<b>Due Date:</b> ${new Date(invoice[0].due_date as string).toLocaleDateString()}`,
+          "<br><br>",
+          "Thank you for your business!"
+        ];
+        const message = messageParts.join("\n");
+
+        const encodedMessage = Buffer.from(message)
+          .toString("base64")
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "");
+
+        await gmail.users.messages.send({
+          userId: "me",
+          requestBody: {
+            raw: encodedMessage,
+          },
+        });
+
+        // Update sent today count
+        await connection.query(
+          "INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = CAST(setting_value AS UNSIGNED) + 1",
+          ["gmail_sent_today", "1"]
+        );
+
+        connection.release();
+        return res.json({ success: true, message: `Invoice sent to ${companyEmail} via Gmail API` });
+      } else {
+        // Fallback to SMTP if configured
+        if (process.env.SMTP_HOST) {
+          const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: Number(process.env.SMTP_PORT),
+            auth: {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS,
+            },
+          });
+
+          await transporter.sendMail({
+            from: '"HRM & ERP Platform" <info@inforesumeedge.com>',
+            to: companyEmail,
+            subject: `Invoice ${invoiceNumber} from HRM & ERP Platform`,
+            html: `
+              <p>Hello ${invoice[0].company_name},</p>
+              <p>Please find your invoice details below:</p>
+              <p><b>Invoice Number:</b> ${invoiceNumber}</p>
+              <p><b>Amount Due:</b> $${amount.toFixed(2)}</p>
+              <p><b>Due Date:</b> ${new Date(invoice[0].due_date as string).toLocaleDateString()}</p>
+              <p>Thank you for your business!</p>
+            `
+          });
+          
+          connection.release();
+          return res.json({ success: true, message: `Invoice sent to ${companyEmail} via SMTP` });
+        } else {
+          connection.release();
+          return res.status(400).json({ success: false, message: "Email service not configured. Please connect Gmail or set SMTP settings." });
+        }
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error sending invoice:", err);
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // List all companies
+  app.get("/api/companies", async (req, res) => {
+    try {
+      const connection = await db.getConnection();
+      const [companies] = await connection.query("SELECT * FROM companies ORDER BY created_at DESC") as [Record<string, unknown>[], unknown];
+      connection.release();
+      res.json(companies);
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Update company
+  app.put("/api/companies/:id", async (req, res) => {
+    const { id } = req.params;
+    const { 
+      name, email, mobile, unique_code, subsidiary, 
+      head_office_location, factory_location, 
+      admin_username, admin_password, logo_url, plan 
+    } = req.body;
+    try {
+      const connection = await db.getConnection();
+      await connection.query(
+        `UPDATE companies SET 
+          name = ?, email = ?, mobile = ?, unique_code = ?, subsidiary = ?, 
+          head_office_location = ?, factory_location = ?, 
+          admin_username = ?, admin_password = ?, logo_url = ?, plan = ? 
+         WHERE id = ?`,
+        [
+          name, email, mobile, unique_code, subsidiary, 
+          head_office_location, factory_location, 
+          admin_username, admin_password, logo_url, plan, id
+        ]
+      );
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Delete company
+  app.delete("/api/companies/:id", async (req, res) => {
+    const { id } = req.params;
+    console.log("Deleting company with ID:", id);
+    try {
+      const connection = await db.getConnection();
+      await connection.query("DELETE FROM companies WHERE id = ?", [id]);
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Recent Companies
+  app.get("/api/super-admin/recent-companies", async (req, res) => {
+    try {
+      const connection = await db.getConnection();
+      const [companies] = await connection.query("SELECT * FROM companies ORDER BY created_at DESC LIMIT 5") as [Record<string, unknown>[], unknown];
+      connection.release();
+      res.json(companies);
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -170,8 +631,425 @@ async function startServer() {
     }
   });
 
+  // WhatsApp Service Logic
+  const sessions = new Map<number, ReturnType<typeof makeWASocket>>();
+  const qrCodes = new Map<number, string>();
+
+  const logger = pino({ level: "silent" });
+
+  const initWhatsApp = async (companyId: number) => {
+    if (sessions.has(companyId)) return sessions.get(companyId);
+
+    const sessionDir = join("/tmp", "whatsapp_sessions", `company_${companyId}`);
+    console.log(`[WhatsApp] Initializing session for company ${companyId} at ${sessionDir}`);
+    
+    if (!fs.existsSync(sessionDir)) {
+      fs.mkdirSync(sessionDir, { recursive: true });
+    }
+
+    try {
+      const { state, saveCreds } = await getAuthState(sessionDir);
+      
+      // Update status to connecting
+      const connectionDb = await db.getConnection();
+      await connectionDb.query(
+        "INSERT INTO whatsapp_accounts (company_id, status) VALUES (?, 'connecting') ON DUPLICATE KEY UPDATE status = 'connecting'",
+        [companyId]
+      );
+      connectionDb.release();
+
+      const { version } = await fetchLatestBaileysVersion();
+      console.log(`[WhatsApp] Using Baileys version ${version}`);
+
+      const sock = makeWASocket({
+        version,
+        printQRInTerminal: false,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, logger),
+        },
+        logger,
+        browser: ["ERP Platform", "Chrome", "1.0.0"],
+      });
+
+      sessions.set(companyId, sock);
+
+      sock.ev.on("connection.update", async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+          console.log(`[WhatsApp] QR generated for company ${companyId}`);
+          const qrBase64 = await QRCode.toDataURL(qr);
+          qrCodes.set(companyId, qrBase64);
+        }
+
+        if (connection === "close") {
+          console.log(`[WhatsApp] Connection closed for company ${companyId}`);
+          const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+          sessions.delete(companyId);
+          qrCodes.delete(companyId);
+
+          const connectionDb = await db.getConnection();
+          await connectionDb.query(
+            "UPDATE whatsapp_accounts SET status = 'disconnected' WHERE company_id = ?",
+            [companyId]
+          );
+          connectionDb.release();
+
+          if (shouldReconnect) {
+            console.log(`[WhatsApp] Reconnecting for company ${companyId}`);
+            initWhatsApp(companyId);
+          }
+        } else if (connection === "open") {
+          console.log(`[WhatsApp] Connection opened for company ${companyId}`);
+          qrCodes.delete(companyId);
+          const connectionDb = await db.getConnection();
+          await connectionDb.query(
+            "INSERT INTO whatsapp_accounts (company_id, status) VALUES (?, 'connected') ON DUPLICATE KEY UPDATE status = 'connected'",
+            [companyId]
+          );
+          connectionDb.release();
+        }
+      });
+
+      sock.ev.on("creds.update", saveCreds);
+
+      return sock;
+    } catch (err) {
+      console.error(`[WhatsApp] Error initializing session for company ${companyId}:`, err);
+      throw err;
+    }
+  };
+
+  // WhatsApp Routes
+  app.get("/api/whatsapp/status", async (req, res) => {
+    const { companyId } = req.query;
+    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+
+    try {
+      const connection = await db.getConnection();
+      const [rows] = await connection.query(
+        "SELECT status FROM whatsapp_accounts WHERE company_id = ?",
+        [companyId]
+      ) as [Record<string, unknown>[], unknown];
+      connection.release();
+
+      const status = rows.length > 0 ? rows[0].status : "disconnected";
+      const qr = qrCodes.get(Number(companyId)) || null;
+
+      res.json({ status, qr });
+    } catch {
+      res.status(500).json({ error: "Failed to get status" });
+    }
+  });
+
+  app.post("/api/whatsapp/connect", async (req, res) => {
+    const { companyId } = req.body;
+    console.log(`[WhatsApp] Connect request received for company ${companyId}`);
+    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+
+    try {
+      await initWhatsApp(Number(companyId));
+      res.json({ success: true, message: "Initializing connection..." });
+    } catch {
+      res.status(500).json({ error: "Failed to initialize connection" });
+    }
+  });
+
+  app.post("/api/whatsapp/disconnect", async (req, res) => {
+    const { companyId } = req.body;
+    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+
+    try {
+      const sock = sessions.get(Number(companyId));
+      if (sock) {
+        await sock.logout();
+        sessions.delete(companyId);
+      }
+
+      const connection = await db.getConnection();
+      await connection.query(
+        "UPDATE whatsapp_accounts SET status = 'disconnected' WHERE company_id = ?",
+        [companyId]
+      );
+      
+      // Clear session directory
+      const sessionDir = join("/tmp", "whatsapp_sessions", `company_${companyId}`);
+      if (fs.existsSync(sessionDir)) {
+        fs.rmSync(sessionDir, { recursive: true, force: true });
+      }
+
+      connection.release();
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to disconnect" });
+    }
+  });
+
+  app.post("/api/whatsapp/send", async (req, res) => {
+    const { company_id, to_number, message } = req.body;
+    console.log(`[WhatsApp] Send request received for company ${company_id} to ${to_number}`);
+    if (!company_id || !to_number || !message) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    try {
+      const sock = sessions.get(Number(company_id));
+      if (!sock) {
+        return res.status(400).json({ error: "WhatsApp not connected for this company" });
+      }
+
+      // Format number: remove +, spaces, and add @s.whatsapp.net
+      let formattedNumber = to_number.replace(/\D/g, "");
+      if (!formattedNumber.endsWith("@s.whatsapp.net")) {
+        formattedNumber += "@s.whatsapp.net";
+      }
+
+      // Rate limiting: check messages in last minute
+      const connection = await db.getConnection();
+      const [recentRows] = await connection.query(
+        "SELECT COUNT(*) as count FROM whatsapp_messages WHERE company_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 MINUTE)",
+        [company_id]
+      ) as [Record<string, unknown>[], unknown];
+
+      if (recentRows[0].count as number >= 20) {
+        connection.release();
+        return res.status(429).json({ error: "Rate limit exceeded (max 20 msgs/min)" });
+      }
+
+      // Add delay (2-5 seconds)
+      const delay = Math.floor(Math.random() * 3000) + 2000;
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+      try {
+        const sentMsg = await sock.sendMessage(formattedNumber, { text: message });
+        
+        await connection.query(
+          "INSERT INTO whatsapp_messages (company_id, to_number, message, status, response_log) VALUES (?, ?, ?, 'sent', ?)",
+          [company_id, to_number, message, JSON.stringify(sentMsg)]
+        );
+
+        connection.release();
+        res.json({ success: true, message: "Message sent" });
+      } catch (sendError) {
+        await connection.query(
+          "INSERT INTO whatsapp_messages (company_id, to_number, message, status, response_log) VALUES (?, ?, ?, 'failed', ?)",
+          [company_id, to_number, message, JSON.stringify(sendError)]
+        );
+        connection.release();
+        res.status(500).json({ error: "Failed to send message", details: sendError });
+      }
+    } catch {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  const getOAuth2Client = () => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    // Use GOOGLE_REDIRECT_URI if set, otherwise construct it from APP_URL or request context
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 
+      (process.env.APP_URL ? `${process.env.APP_URL}/api/gmail/callback` : null);
+
+    if (!clientId || !clientSecret || clientId === 'undefined' || clientSecret === 'undefined') {
+      return null;
+    }
+
+    return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+  };
+
+  app.get("/api/gmail/auth-url", (req, res) => {
+    const { companyId } = req.query;
+    const client = getOAuth2Client();
+    
+    if (!client) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the Settings > Secrets menu." 
+      });
+    }
+
+    // If redirectUri was null (no APP_URL set), we can try to get it from the request
+    if (!client.redirectUri) {
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.get('host');
+      client.redirectUri = `${protocol}://${host}/api/gmail/callback`;
+    }
+
+    const url = client.generateAuthUrl({
+      access_type: "offline",
+      scope: [
+        "https://www.googleapis.com/auth/gmail.send", 
+        "https://www.googleapis.com/auth/userinfo.email",
+        "openid"
+      ],
+      prompt: "consent",
+      state: companyId ? String(companyId) : undefined
+    });
+    res.json({ url });
+  });
+
+  app.get("/api/gmail/callback", async (req, res) => {
+    const { code, state: companyId } = req.query;
+    const client = getOAuth2Client();
+    
+    if (!client) {
+      return res.status(500).send("OAuth client not initialized. Check server environment variables.");
+    }
+
+    // Ensure redirectUri is set for token exchange
+    if (!client.redirectUri) {
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.get('host');
+      client.redirectUri = `${protocol}://${host}/api/gmail/callback`;
+    }
+
+    try {
+      const { tokens } = await client.getToken(code as string);
+      const connection = await db.getConnection();
+      
+      if (companyId) {
+        // Save tokens for a specific company
+        await connection.query(
+          "UPDATE companies SET gmail_tokens = ? WHERE id = ?",
+          [JSON.stringify(tokens), companyId]
+        );
+      } else {
+        // Fallback to global super admin tokens
+        await connection.query(
+          "INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?",
+          ["gmail_tokens", JSON.stringify(tokens), JSON.stringify(tokens)]
+        );
+      }
+      
+      connection.release();
+      
+      // Redirect back to the appropriate page
+      const redirectPath = companyId ? '/super-admin/companies' : '/super-admin/gmail';
+      
+      res.send(`
+        <html>
+          <body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f8f9fa;">
+            <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center;">
+              <h1 style="color: #10b981;">Authentication Successful!</h1>
+              <p style="color: #64748b;">The Gmail account has been connected successfully.</p>
+              <p style="color: #94a3b8; font-size: 14px;">Redirecting back to the dashboard...</p>
+              <script>
+                setTimeout(() => {
+                  window.location.href = '${redirectPath}';
+                }, 2000);
+              </script>
+            </div>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      console.error("Gmail Auth Error:", error);
+      res.status(500).send("Authentication failed. Please try again.");
+    }
+  });
+
+  app.get("/api/gmail/status", async (req, res) => {
+    const { companyId } = req.query;
+    try {
+      const connection = await db.getConnection();
+      let connected = false;
+      let lastSync = null;
+
+      if (companyId) {
+        const [rows] = await connection.query("SELECT gmail_tokens FROM companies WHERE id = ?", [companyId]) as [Record<string, unknown>[], unknown];
+        connected = rows.length > 0 && rows[0].gmail_tokens !== null;
+      } else {
+        const [rows] = await connection.query("SELECT * FROM settings WHERE setting_key = 'gmail_tokens'") as [Record<string, unknown>[], unknown];
+        connected = rows.length > 0;
+        const [lastSyncRows] = await connection.query("SELECT updated_at FROM settings WHERE setting_key = 'gmail_tokens'") as [Record<string, unknown>[], unknown];
+        lastSync = lastSyncRows.length > 0 ? new Date(lastSyncRows[0].updated_at as string).toLocaleString() : null;
+      }
+      
+      const [sentTodayRows] = await connection.query("SELECT setting_value FROM settings WHERE setting_key = 'gmail_sent_today'") as [Record<string, unknown>[], unknown];
+      
+      connection.release();
+      
+      res.json({
+        connected,
+        sentToday: sentTodayRows.length > 0 ? parseInt(sentTodayRows[0].setting_value as string) : 0,
+        lastSync
+      });
+    } catch {
+      res.status(500).json({ connected: false });
+    }
+  });
+
+  app.post("/api/gmail/send-test", async (req, res) => {
+    try {
+      const connection = await db.getConnection();
+      const [rows] = await connection.query("SELECT * FROM settings WHERE setting_key = 'gmail_tokens'") as [Record<string, unknown>[], unknown];
+      
+      if (rows.length === 0) {
+        connection.release();
+        return res.status(401).json({ success: false, message: "Gmail not connected" });
+      }
+
+      const tokens = JSON.parse(rows[0].setting_value as string);
+      const client = getOAuth2Client();
+      if (!client) {
+        connection.release();
+        return res.status(400).json({ success: false, message: "Gmail OAuth not configured" });
+      }
+      client.setCredentials(tokens);
+
+      const gmail = google.gmail({ version: "v1", auth: client });
+      
+      // Get user email
+      const oauth2 = google.oauth2({ version: "v2", auth: client });
+      const userInfo = await oauth2.userinfo.get();
+      const userEmail = userInfo.data.email;
+
+      const subject = "System Test Email";
+      const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString("base64")}?=`;
+      const messageParts = [
+        `From: HRM & ERP Platform <${userEmail}>`,
+        `To: ${userEmail}`,
+        `Content-Type: text/html; charset=utf-8`,
+        `MIME-Version: 1.0`,
+        `Subject: ${utf8Subject}`,
+        "",
+        "This is a test email from your HRM & ERP Platform Gmail Integration protocol.",
+        "<br><br>",
+        "<b>Status:</b> Active",
+        "<br>",
+        "<b>Protocol:</b> Gmail API OAuth 2.0"
+      ];
+      const message = messageParts.join("\n");
+
+      const encodedMessage = Buffer.from(message)
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+
+      await gmail.users.messages.send({
+        userId: "me",
+        requestBody: {
+          raw: encodedMessage,
+        },
+      });
+
+      // Update sent today count
+      await connection.query(
+        "INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = CAST(setting_value AS UNSIGNED) + 1",
+        ["gmail_sent_today", "1"]
+      );
+
+      connection.release();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Gmail Send Error:", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   // Vite middleware for development
-  if (environment !== "production") {
+  if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -183,7 +1061,7 @@ async function startServer() {
     console.log(`Serving static files from: ${distPath}`);
     app.use(express.static(distPath));
     
-    app.get('/{*path}', (req, res) => {
+    app.get('(.*)', (req, res) => {
       const indexPath = path.resolve(distPath, 'index.html');
       res.sendFile(indexPath, (err) => {
         if (err) {
@@ -203,7 +1081,10 @@ async function startServer() {
       db.getConnection()
         .then(connection => {
           console.log("✅ Database connected successfully to Hostinger");
-          connection.release();
+          initializeDatabase(connection)
+            .then(() => console.log("✅ Database initialized successfully"))
+            .catch(err => console.error("❌ Database initialization failed", err))
+            .finally(() => connection.release());
         })
         .catch(error => {
           const errMessage = error instanceof Error ? error.message : String(error);

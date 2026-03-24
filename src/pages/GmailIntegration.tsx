@@ -1,0 +1,302 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  Shield, 
+  LayoutDashboard, 
+  Building2, 
+  CreditCard, 
+  ShieldCheck, 
+  Maximize2, 
+  Menu, 
+  Search,
+  FileText,
+  Link2,
+  Mail,
+  MessageSquare,
+  RefreshCw,
+  Send,
+  FileSpreadsheet,
+  Bell,
+  History
+} from 'lucide-react';
+
+export default function GmailIntegration() {
+  const navigate = useNavigate();
+  const [status, setStatus] = useState<'connected' | 'disconnected' | 'loading'>('loading');
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [emailsSentToday, setEmailsSentToday] = useState(0);
+  const [isSendingTest, setIsSendingTest] = useState(false);
+
+  useEffect(() => {
+    fetchStatus();
+  }, []);
+
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch('/api/gmail/status');
+      const data = await res.json();
+      setStatus(data.connected ? 'connected' : 'disconnected');
+      setLastSync(data.lastSync);
+      setEmailsSentToday(data.sentToday || 0);
+    } catch {
+      setStatus('disconnected');
+    }
+  };
+
+  const handleConnect = async () => {
+    try {
+      const res = await fetch('/api/gmail/auth-url');
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else if (data.message) {
+        alert(data.message);
+      } else {
+        alert('Failed to get authorization URL');
+      }
+    } catch {
+      alert('Failed to connect to the server. Please try again.');
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    setIsSendingTest(true);
+    try {
+      const res = await fetch('/api/gmail/send-test', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert('Test email sent successfully!');
+        fetchStatus();
+      } else {
+        alert('Failed to send test email: ' + data.message);
+      }
+    } catch {
+      alert('Error sending test email');
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
+
+  const menuItems = [
+    { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard, path: '/super-admin/dashboard' },
+    { id: 'companies', label: 'COMPANIES', icon: Building2, path: '/super-admin/companies' },
+    { id: 'plans', label: 'SUBSCRIPTION PLANS', icon: CreditCard, path: '/super-admin/plans' },
+    { id: 'invoice', label: 'INVOICE', icon: FileText, path: '/super-admin/invoice' },
+    { id: 'connection', label: 'CONNECTION', icon: Link2, path: '/super-admin/connection' },
+    { id: 'gmail', label: 'GMAIL INTEGRATION', icon: Mail, active: true, path: '/super-admin/gmail' },
+    { id: 'whatsapp', label: 'WHATSAPP INTEGRATION', icon: MessageSquare, path: '/super-admin/whatsapp' },
+    { id: 'permissions', label: 'EMPLOYER PANEL PERMISSIONS', icon: ShieldCheck, path: '/super-admin/permissions' },
+  ];
+
+  const features = [
+    { name: 'Send Emails', icon: Mail, description: 'Automated system communications' },
+    { name: 'Send Invoices', icon: FileText, description: 'Direct billing to clients' },
+    { name: 'Send Payroll Slips', icon: FileSpreadsheet, description: 'Secure employee payroll delivery' },
+    { name: 'Employee Notifications', icon: Bell, description: 'Internal system alerts' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#f8f9fa] flex">
+      {/* Sidebar */}
+      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen z-40">
+        <div className="p-6 flex items-center gap-3 border-b border-slate-100">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
+            <Shield size={22} />
+          </div>
+          <span className="font-black text-xl tracking-tight uppercase">SUPER ADMIN</span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-6 px-4">
+          <div className="mb-8">
+            <p className="text-[10px] font-bold text-slate-400 tracking-[0.2em] px-4 mb-4 uppercase">CORE PROTOCOL</p>
+            <nav className="space-y-1">
+              {menuItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => navigate(item.path)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+                    item.active 
+                      ? 'bg-blue-50 text-blue-600 font-bold border-l-4 border-blue-600' 
+                      : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <item.icon size={18} className={item.active ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'} />
+                  <span className="text-[11px] tracking-wider uppercase">{item.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-slate-100">
+          <button 
+            onClick={() => navigate('/')}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
+          >
+            Exit to Site
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* Top Header */}
+        <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-30">
+          <div className="flex items-center gap-6">
+            <button className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 transition-colors">
+              <Menu size={20} />
+            </button>
+            <div className="relative hidden md:block">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input 
+                type="text" 
+                placeholder="Search protocol..." 
+                className="pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm w-64 focus:ring-2 focus:ring-slate-200 transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <button className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 transition-colors">
+              <Maximize2 size={20} />
+            </button>
+            <div className="h-8 w-px bg-slate-200" />
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-xs font-black text-slate-900 uppercase tracking-wider">SUPER ADMIN</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">NETWORK ARCHITECT</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-blue-200">
+                NA
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="p-8 space-y-8">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">GMAIL INTEGRATION</h1>
+            <p className="text-slate-500 font-medium mt-1">Configure and monitor Google Mail protocol for system communications.</p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Status Card */}
+            <div className="lg:col-span-1 space-y-6">
+              <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100">
+                <div className="flex items-center justify-between mb-8">
+                  <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-red-600">
+                    <Mail size={32} />
+                  </div>
+                  <div className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase flex items-center gap-2 ${
+                    status === 'connected' ? 'bg-emerald-50 text-emerald-600' : 
+                    status === 'loading' ? 'bg-slate-50 text-slate-400' : 'bg-rose-50 text-rose-600'
+                  }`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${
+                      status === 'connected' ? 'bg-emerald-600' : 
+                      status === 'loading' ? 'bg-slate-400 animate-pulse' : 'bg-rose-600'
+                    }`} />
+                    {status.toUpperCase()}
+                  </div>
+                </div>
+
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Gmail Status</h2>
+                <p className="text-slate-500 text-sm font-medium mb-8">
+                  {status === 'connected' 
+                    ? 'System is currently authorized to send emails via Gmail API.' 
+                    : 'Authorize the system to use your Gmail account for automated protocols.'}
+                </p>
+
+                <div className="space-y-4">
+                  {status === 'connected' ? (
+                    <>
+                      <button 
+                        onClick={handleSendTestEmail}
+                        disabled={isSendingTest}
+                        className="w-full flex items-center justify-center gap-2 py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 disabled:opacity-50"
+                      >
+                        {isSendingTest ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />}
+                        Send Test Email
+                      </button>
+                      <button 
+                        onClick={handleConnect}
+                        className="w-full flex items-center justify-center gap-2 py-4 bg-slate-50 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all"
+                      >
+                        <RefreshCw size={16} />
+                        Reconnect Account
+                      </button>
+                    </>
+                  ) : (
+                    <button 
+                      onClick={handleConnect}
+                      className="w-full flex items-center justify-center gap-2 py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                    >
+                      <Mail size={16} />
+                      Connect Gmail
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Stats Card */}
+              <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100">
+                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">PROTOCOL METRICS</h3>
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
+                        <History size={18} />
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Last Sync Time</span>
+                    </div>
+                    <span className="text-xs font-black text-slate-900">{lastSync || 'NEVER'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+                        <Send size={18} />
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Emails Sent Today</span>
+                    </div>
+                    <span className="text-xs font-black text-slate-900">{emailsSentToday}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Features Card */}
+            <div className="lg:col-span-2">
+              <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 h-full">
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">System Features</h2>
+                <p className="text-slate-500 text-sm font-medium mb-8">The following system modules will utilize the Gmail protocol once connected.</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {features.map((feature) => (
+                    <div key={feature.name} className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-lg transition-all group">
+                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-blue-600 shadow-sm mb-4 transition-colors">
+                        <feature.icon size={24} />
+                      </div>
+                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-1">{feature.name}</h4>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{feature.description}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-12 p-6 bg-blue-50 rounded-3xl border border-blue-100 flex items-start gap-4">
+                  <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shrink-0">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-black text-blue-900 uppercase tracking-wider mb-1">Security Protocol</h5>
+                    <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
+                      Integration uses OAuth 2.0 standard. Access is limited to sending emails only. Your credentials are never stored on our servers; only encrypted access tokens are used.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

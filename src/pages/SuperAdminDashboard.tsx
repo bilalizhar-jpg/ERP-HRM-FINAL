@@ -1,11 +1,36 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Home, LayoutDashboard, Users, CreditCard, Mail, Database } from 'lucide-react';
+import { 
+  Shield, 
+  LayoutDashboard, 
+  Building2, 
+  Users, 
+  CreditCard, 
+  ShieldCheck, 
+  Maximize2, 
+  Menu, 
+  AlertCircle,
+  Database,
+  Search,
+  FileText,
+  Link2,
+  Mail,
+  MessageSquare
+} from 'lucide-react';
 import { motion } from 'framer-motion';
 
+interface Company {
+  id: number;
+  name: string;
+  email: string;
+  status: string;
+  created_at: string;
+}
+
 export default function SuperAdminDashboard() {
-  const [stats] = useState({ users: null, subscriptions: null, requests: null });
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ totalCompanies: 0, activeCompanies: 0, expiredLicenses: 0 });
+  const [recentCompanies, setRecentCompanies] = useState<Company[]>([]);
   const [dbStatus, setDbStatus] = useState<{ 
     status: string; 
     message: string;
@@ -20,6 +45,17 @@ export default function SuperAdminDashboard() {
         const res = await fetch('/api/db-health');
         const data = await res.json();
         setDbStatus(data);
+        
+        if (data.status === 'connected' && data.isInitialized) {
+          // Fetch stats and recent companies
+          const [statsRes, companiesRes] = await Promise.all([
+            fetch('/api/super-admin/stats'),
+            fetch('/api/super-admin/recent-companies')
+          ]);
+          
+          if (statsRes.ok) setStats(await statsRes.json());
+          if (companiesRes.ok) setRecentCompanies(await companiesRes.json());
+        }
       } catch {
         setDbStatus({ status: 'error', message: 'Failed to check database status.' });
       } finally {
@@ -29,104 +65,223 @@ export default function SuperAdminDashboard() {
     checkDb();
   }, []);
 
+  const menuItems = [
+    { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard, active: true, path: '/super-admin/dashboard' },
+    { id: 'companies', label: 'COMPANIES', icon: Building2, path: '/super-admin/companies' },
+    { id: 'plans', label: 'SUBSCRIPTION PLANS', icon: CreditCard, path: '/super-admin/plans' },
+    { id: 'invoice', label: 'INVOICE', icon: FileText, path: '/super-admin/invoice' },
+    { id: 'connection', label: 'CONNECTION', icon: Link2, path: '/super-admin/connection' },
+    { id: 'gmail', label: 'GMAIL INTEGRATION', icon: Mail, path: '/super-admin/gmail' },
+    { id: 'whatsapp', label: 'WHATSAPP INTEGRATION', icon: MessageSquare, path: '/super-admin/whatsapp' },
+    { id: 'permissions', label: 'EMPLOYER PANEL PERMISSIONS', icon: ShieldCheck, path: '/super-admin/permissions' },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Top Navigation Bar */}
-      <div className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-6">
-          <div className="flex gap-2">
-            <button 
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors border border-slate-200 flex items-center gap-2 px-3"
-              title="Return"
-            >
-              <ArrowLeft size={18} />
-              <span className="text-sm font-medium">Return</span>
-            </button>
-            <button 
-              onClick={() => navigate('/')}
-              className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors border border-slate-200 flex items-center gap-2 px-3"
-              title="Home"
-            >
-              <Home size={18} />
-              <span className="text-sm font-medium">Home</span>
-            </button>
+    <div className="min-h-screen bg-[#f8f9fa] flex">
+      {/* Sidebar */}
+      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen z-40">
+        <div className="p-6 flex items-center gap-3 border-b border-slate-100">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
+            <Shield size={22} />
           </div>
-          <div className="h-6 w-px bg-slate-200 mx-2" />
-          <div className="flex items-center gap-2 text-slate-800 font-bold text-xl">
-            <LayoutDashboard className="text-blue-600" />
-            <span>Super Admin Dashboard</span>
-          </div>
+          <span className="font-black text-xl tracking-tight uppercase">SUPER ADMIN</span>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-bold text-slate-900">Bilal Izhar</p>
-            <p className="text-xs text-slate-500">Super Administrator</p>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
-            BI
-          </div>
-        </div>
-      </div>
 
-      <div className="p-8 max-w-7xl mx-auto">
-        {/* Database Status Banner */}
-        {dbStatus && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`mb-8 p-5 rounded-2xl border flex items-start gap-4 shadow-sm ${
-              dbStatus.status === 'connected' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
-              dbStatus.status === 'not_configured' ? 'bg-amber-50 border-amber-200 text-amber-800' : 
-              dbStatus.status === 'auth_error' ? 'bg-rose-50 border-rose-200 text-rose-800' :
-              'bg-rose-50 border-rose-200 text-rose-800'
-            }`}
-          >
-            <div className={`p-2 rounded-xl ${
-              dbStatus.status === 'connected' ? 'bg-emerald-100' : 
-              dbStatus.status === 'not_configured' ? 'bg-amber-100' : 
-              'bg-rose-100'
-            }`}>
-              <Database size={24} className={
-                dbStatus.status === 'connected' ? 'text-emerald-600' : 
-                dbStatus.status === 'not_configured' ? 'text-amber-600' : 
-                'text-rose-600'
-              } />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full animate-pulse ${
-                  dbStatus.status === 'connected' ? 'bg-emerald-500' : 
-                  dbStatus.status === 'not_configured' ? 'bg-amber-500' : 
-                  'bg-rose-500'
-                }`} />
-                <span className="font-bold text-lg">Database Status: {dbStatus.status.replace('_', ' ').toUpperCase()}</span>
-              </div>
-              <p className="text-sm mt-1 opacity-90">{dbStatus.message}</p>
-              
-              {dbStatus.status === 'connected' && dbStatus.tables && dbStatus.tables.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {dbStatus.tables.map((table: string) => (
-                    <span key={table} className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-mono border border-emerald-200 uppercase">
-                      {table}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex gap-3 mt-3">
-                <button 
-                  onClick={() => {
-                    setLoading(true);
-                    setDbStatus(null);
-                    window.location.reload();
-                  }}
-                  className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-bold transition-colors border border-current"
+        <div className="flex-1 overflow-y-auto py-6 px-4">
+          <div className="mb-8">
+            <p className="text-[10px] font-bold text-slate-400 tracking-[0.2em] px-4 mb-4 uppercase">CORE PROTOCOL</p>
+            <nav className="space-y-1">
+              {menuItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => navigate(item.path)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+                    item.active 
+                      ? 'bg-blue-50 text-blue-600 font-bold border-l-4 border-blue-600' 
+                      : 'text-slate-500 hover:bg-slate-50'
+                  }`}
                 >
-                  Retry Connection
+                  <item.icon size={18} className={item.active ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'} />
+                  <span className="text-[11px] tracking-wider uppercase">{item.label}</span>
                 </button>
-                
+              ))}
+            </nav>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 tracking-[0.2em] px-4 mb-4 uppercase">Employee Rules</p>
+            <nav className="space-y-1">
+              <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 transition-all">
+                <LayoutDashboard size={18} className="text-slate-400" />
+                <span className="text-[11px] tracking-wider uppercase">Node Dashboard</span>
+              </button>
+            </nav>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-slate-100">
+          <button 
+            onClick={() => navigate('/')}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
+          >
+            Exit to Site
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* Top Header */}
+        <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-30">
+          <div className="flex items-center gap-6">
+            <button className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 transition-colors">
+              <Menu size={20} />
+            </button>
+            <div className="relative hidden md:block">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input 
+                type="text" 
+                placeholder="Search protocol..." 
+                className="pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm w-64 focus:ring-2 focus:ring-slate-200 transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <button className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 transition-colors">
+              <Maximize2 size={20} />
+            </button>
+            <div className="h-8 w-px bg-slate-200" />
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-xs font-black text-slate-900 uppercase tracking-wider">SUPER ADMIN</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">SYSTEM ARCHITECT</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-blue-200">
+                SA
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="p-8 space-y-8">
+          {/* Section Title */}
+          <div>
+            <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase mb-6">SUPER ADMIN OVERVIEW</p>
+            
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Total Companies */}
+              <div className="bg-white p-6 rounded-[2rem] flex items-center gap-6 shadow-xl border border-slate-100">
+                <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
+                  <Building2 size={28} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1">TOTAL COMPANIES</p>
+                  <p className="text-4xl font-black text-slate-900">{stats.totalCompanies}</p>
+                </div>
+              </div>
+
+              {/* Active Companies */}
+              <div className="bg-white p-6 rounded-[2rem] flex items-center gap-6 shadow-xl border border-slate-100">
+                <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
+                  <Users size={28} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1">ACTIVE COMPANIES</p>
+                  <p className="text-4xl font-black text-slate-900">{stats.activeCompanies}</p>
+                </div>
+              </div>
+
+              {/* License Expired */}
+              <div className="bg-white p-6 rounded-[2rem] flex items-center gap-6 shadow-xl border border-slate-100">
+                <div className="w-16 h-16 bg-rose-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-rose-200">
+                  <AlertCircle size={28} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1">LICENSE EXPIRED</p>
+                  <p className="text-4xl font-black text-slate-900">{stats.expiredLicenses}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Companies Section */}
+          <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-xl border border-slate-100">
+            <div className="p-8 flex items-center justify-between border-b border-slate-100">
+              <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">RECENT COMPANIES</h2>
+              <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                <span className="text-[10px] font-black tracking-widest uppercase">LIVE FEED</span>
+              </div>
+            </div>
+            
+            <div className="p-8">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-[10px] font-bold text-slate-400 tracking-[0.2em] uppercase text-left">
+                      <th className="pb-6">COMPANY NAME</th>
+                      <th className="pb-6">EMAIL</th>
+                      <th className="pb-6">STATUS</th>
+                      <th className="pb-6 text-right">JOINED DATE</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-600">
+                    {recentCompanies.length > 0 ? (
+                      recentCompanies.map((company) => (
+                        <tr key={company.id} className="border-t border-slate-50 group hover:bg-slate-50 transition-colors">
+                          <td className="py-5 text-xs font-bold text-slate-900 uppercase tracking-wider group-hover:text-blue-600 transition-colors">{company.name}</td>
+                          <td className="py-5 text-xs font-mono text-slate-500">{company.email}</td>
+                          <td className="py-5">
+                            <span className={`px-2 py-1 rounded text-[9px] font-black tracking-widest ${
+                              company.status === 'active' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
+                            }`}>
+                              {company.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="py-5 text-xs font-mono text-slate-400 text-right">
+                            {new Date(company.created_at).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-t border-slate-50">
+                        <td colSpan={4} className="py-20 text-center">
+                          <div className="flex flex-col items-center gap-3 opacity-20">
+                            <Database size={48} className="text-slate-400" />
+                            <p className="text-xs font-bold tracking-widest uppercase text-slate-400">NO COMPANIES DETECTED</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Database Status (Floating/Bottom) */}
+          {dbStatus && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className={`p-6 rounded-3xl border flex items-center justify-between shadow-lg ${
+                dbStatus.status === 'connected' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
+                'bg-rose-50 border-rose-200 text-rose-800'
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-2xl ${dbStatus.status === 'connected' ? 'bg-emerald-100' : 'bg-rose-100'}`}>
+                  <Database size={24} className={dbStatus.status === 'connected' ? 'text-emerald-600' : 'text-rose-600'} />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest mb-1">Database Connectivity</p>
+                  <p className="text-sm opacity-80">{dbStatus.message}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
                 {dbStatus.status === 'connected' && !dbStatus.isInitialized && (
                   <button 
                     onClick={async () => {
@@ -134,114 +289,40 @@ export default function SuperAdminDashboard() {
                         setLoading(true);
                         const res = await fetch('/api/init-db', { method: 'POST' });
                         const data = await res.json();
-                        if (data.success) {
-                          window.location.reload();
-                        } else {
-                          alert("Failed to initialize: " + data.message);
-                        }
+                        if (data.success) window.location.reload();
+                        else alert("Failed to initialize: " + data.message);
                       } catch {
                         alert("Error initializing database");
                       } finally {
                         setLoading(false);
                       }
                     }}
-                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"
+                    className="px-6 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
                   >
-                    Initialize Database Tables
+                    Initialize Protocol
                   </button>
                 )}
-              </div>
-              {dbStatus.status === 'auth_error' && (
-                <div className="mt-4 p-4 bg-white/50 rounded-xl border border-rose-200 text-rose-900 text-xs space-y-2">
-                  <p className="font-bold uppercase tracking-wider">Troubleshooting Steps:</p>
-                  <ul className="list-disc ml-4 space-y-1">
-                    <li>Verify <strong>DB_PASSWORD</strong> in Settings &gt; Secrets matches the one you set in Hostinger.</li>
-                    <li>Ensure <strong>DB_USER</strong> is exactly <code>u298840747_erp</code>.</li>
-                    <li>Double-check that <strong>Any Host</strong> is still enabled in Hostinger hPanel &gt; Remote MySQL.</li>
-                    <li>Try resetting the database password in Hostinger and updating it in AI Studio.</li>
-                  </ul>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 flex flex-col gap-4"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
-                <Users size={24} />
-              </div>
-              <div>
-                <h3 className="text-slate-500 font-medium">Total Users</h3>
-                <p className="text-4xl font-black text-slate-900 mt-1">{stats.users ?? '0'}</p>
-              </div>
-              <div className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded-md self-start">
-                +0% from last month
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-2 bg-white border border-current rounded-xl text-xs font-bold hover:bg-white/50 transition-all"
+                >
+                  Refresh
+                </button>
               </div>
             </motion.div>
-
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 flex flex-col gap-4"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-                <CreditCard size={24} />
-              </div>
-              <div>
-                <h3 className="text-slate-500 font-medium">Active Subscriptions</h3>
-                <p className="text-4xl font-black text-slate-900 mt-1">{stats.subscriptions ?? '0'}</p>
-              </div>
-              <div className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded-md self-start">
-                +0% from last month
-              </div>
-            </motion.div>
-
-            <motion.div 
-              whileHover={{ y: -5 }}
-              className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 flex flex-col gap-4"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
-                <Mail size={24} />
-              </div>
-              <div>
-                <h3 className="text-slate-500 font-medium">Pending Demo Requests</h3>
-                <p className="text-4xl font-black text-slate-900 mt-1">{stats.requests ?? '0'}</p>
-              </div>
-              <div className="text-xs text-amber-600 font-bold bg-amber-50 px-2 py-1 rounded-md self-start">
-                New requests today
-              </div>
-            </motion.div>
-          </div>
-        )}
-
-        <div className="mt-12 p-8 bg-blue-900 rounded-[2.5rem] text-white relative overflow-hidden shadow-2xl shadow-blue-900/20">
-          <div className="relative z-10">
-            <h2 className="text-2xl font-bold mb-4">System Information</h2>
-            <p className="text-blue-200 max-w-2xl">
-              The Super Admin Dashboard provides a centralized view of all system activities. 
-              Real-time data synchronization is currently active with your Hostinger MySQL database.
-            </p>
-            <div className="mt-8 flex gap-4">
-              <button className="px-6 py-3 bg-white text-blue-900 rounded-2xl font-bold hover:bg-blue-50 transition-colors">
-                Manage Users
-              </button>
-              <button className="px-6 py-3 bg-blue-800 text-white rounded-2xl font-bold hover:bg-blue-700 transition-colors border border-blue-700">
-                View Logs
-              </button>
-            </div>
-          </div>
-          {/* Decorative background element */}
-          <div className="absolute top-[-50%] right-[-10%] w-[60%] h-[200%] bg-blue-800/30 rounded-full blur-3xl transform rotate-12" />
+          )}
         </div>
-      </div>
+      </main>
+
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-slate-200 border-t-black rounded-full animate-spin" />
+            <p className="text-[10px] font-black tracking-[0.3em] uppercase text-slate-400">Synchronizing Protocol</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

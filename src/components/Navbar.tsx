@@ -34,7 +34,7 @@ export default function Navbar() {
               <div className="flex items-center space-x-2 text-slate-400">
                 <Link to="/super-admin" className="text-slate-600 hover:text-blue-600 font-medium">Super Admin</Link>
                 <span>|</span>
-                <a href="/login/admin-employer" className="text-slate-600 hover:text-blue-600 font-medium">Admin Employer</a>
+                <Link to="/company-admin" className="text-slate-600 hover:text-blue-600 font-medium">Admin Employer</Link>
                 <span>|</span>
                 <a href="/login/employee" className="text-slate-600 hover:text-blue-600 font-medium">Employee</a>
               </div>
