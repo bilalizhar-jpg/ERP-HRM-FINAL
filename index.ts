@@ -9,11 +9,10 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
-  const environment = process.env.NODE_ENV ?? "development";
+  const PORT = process.env.PORT || 3000;
 
   console.log("Starting server...");
-  console.log(`Environment: ${environment}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
   console.log(`Port: ${PORT}`);
 
   app.use(express.json());
@@ -170,7 +169,7 @@ async function startServer() {
   });
 
   // Vite middleware for development
-  if (environment !== "production") {
+  if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -182,7 +181,7 @@ async function startServer() {
     console.log(`Serving static files from: ${distPath}`);
     app.use(express.static(distPath));
     
-    app.get('/{*path}', (req, res) => {
+    app.get('(.*)', (req, res) => {
       const indexPath = path.resolve(distPath, 'index.html');
       res.sendFile(indexPath, (err) => {
         if (err) {
@@ -192,8 +191,6 @@ async function startServer() {
       });
     });
   }
-
-
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
