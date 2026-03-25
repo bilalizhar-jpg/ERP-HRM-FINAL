@@ -1,5 +1,5 @@
 {
   "name": "multifunctionalHRM-ERP",
   "description": "A multifunctional HRM and ERP platform for business operations.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["camera", "microphone", "geolocation"]
 }

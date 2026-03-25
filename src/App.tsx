@@ -47,6 +47,8 @@ import CompanyAdminAttendance from './pages/CompanyAdminAttendance';
 import CompanyAdminDepartment from './pages/CompanyAdminDepartment';
 import CompanyAdminDesignation from './pages/CompanyAdminDesignation';
 import CompanyAdminEmployee from './pages/CompanyAdminEmployee';
+import EmployeeLayout from './components/EmployeeLayout';
+import EmployeeAttendance from './pages/EmployeeAttendance';
 import EmployeeLogin from './pages/EmployeeLogin';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 
@@ -112,8 +114,11 @@ function App() {
           <Route path="employee" element={<CompanyAdminEmployee />} />
           {/* Add more routes here as needed */}
         </Route>
-        <Route path="/employee" element={<EmployeeLogin />} />
-        <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
+        <Route path="/employee/login" element={<EmployeeLogin />} />
+        <Route path="/employee" element={<EmployeeLayout />}>
+          <Route path="dashboard" element={<EmployeeDashboard />} />
+          <Route path="attendance" element={<EmployeeAttendance />} />
+        </Route>
       </Routes>
     </Router>
   )

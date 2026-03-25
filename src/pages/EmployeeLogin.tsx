@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Shield, Eye, EyeOff, User, Lock, ArrowLeft } from 'lucide-react';
 
 export default function EmployeeLogin() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -16,7 +16,7 @@ export default function EmployeeLogin() {
       const res = await fetch('/api/employee/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ username, password })
       });
       const data = await res.json();
       if (data.success) {
@@ -56,11 +56,11 @@ export default function EmployeeLogin() {
           <div className="relative">
             <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
-              type="email" 
-              placeholder="Email Address" 
+              type="text" 
+              placeholder="Username" 
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full bg-slate-50 border-none rounded-xl pl-12 pr-4 py-4 text-slate-900 text-sm focus:ring-2 focus:ring-blue-600 transition-all"
             />
           </div>

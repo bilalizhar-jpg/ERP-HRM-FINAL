@@ -6,6 +6,7 @@ interface Employee {
   id: number;
   name: string;
   email: string;
+  password: string;
   employee_id: string;
   department: string;
   designation: string;
@@ -105,7 +106,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
       const res = await fetch(`/api/employees?company_id=${companyId}`);
       if (res.ok) {
         const data = await res.json();
-        const parsedData = data.map((emp: any) => ({
+        const parsedData = data.map((emp: { custom_fields: string | string[] }) => ({
           ...emp,
           custom_fields: typeof emp.custom_fields === 'string' ? JSON.parse(emp.custom_fields) : (emp.custom_fields || [])
         }));
@@ -306,10 +307,11 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
 
   const openNewForm = () => {
     resetForm();
+    const randomStr = generateRandomString(8);
     setFormData(prev => ({
       ...prev,
-      username: `user_${generateRandomString(6)}`,
-      password: generateRandomString(10)
+      username: randomStr,
+      password: randomStr
     }));
     setShowForm(true);
   };
@@ -354,6 +356,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
       // Tab filter
       if (activeTab === 'inactive' && emp.status !== 'inactive') return false;
       if (activeTab === 'employee' && emp.status === 'inactive') return false;
+      if (activeTab === 'positions' && !emp.designation) return false;
       
       // Search filter
       if (searchTerm && !emp.name.toLowerCase().includes(searchTerm.toLowerCase()) && 
@@ -661,6 +664,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
                 <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">PROFILE</th>
                 <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">EMPLOYEE ID</th>
                 <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">NAME OF EMPLOYEE</th>
+                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">CREDENTIALS</th>
                 <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">EMAIL</th>
                 <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">MOBILE NO</th>
                 <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">DATE OF BIRTH</th>
@@ -673,7 +677,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center">
+                  <td colSpan={12} className="py-8 text-center">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
                     </div>
@@ -681,7 +685,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
                 </tr>
               ) : paginatedEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-slate-500">No data available in table</td>
+                  <td colSpan={12} className="py-8 text-center text-slate-500">No data available in table</td>
                 </tr>
               ) : (
                 paginatedEmployees.map((emp, index) => (
@@ -698,6 +702,10 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
                     </td>
                     <td className="py-3 px-4 text-sm font-medium text-slate-900">{emp.employee_id || '-'}</td>
                     <td className="py-3 px-4 text-sm font-bold text-emerald-600">{emp.name}</td>
+                    <td className="py-3 px-4 text-sm text-slate-600">
+                      <div>User: {emp.username}</div>
+                      <div>Pass: {emp.password}</div>
+                    </td>
                     <td className="py-3 px-4 text-sm text-slate-600">{emp.email}</td>
                     <td className="py-3 px-4 text-sm text-slate-600">{emp.mobile_no || '-'}</td>
                     <td className="py-3 px-4 text-sm text-slate-600">

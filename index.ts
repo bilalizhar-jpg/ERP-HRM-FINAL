@@ -1,5 +1,4 @@
 import express from "express";
-import bcrypt from 'bcryptjs';
 import path from "path";
 import { fileURLToPath } from "url";
 import nodemailer from "nodemailer";
@@ -17,6 +16,27 @@ import pino from "pino";
 import QRCode from "qrcode";
 import fs from "fs";
 import { join } from "path";
+
+interface AttendanceRecord {
+  id: number;
+  company_id: number;
+  employee_id: number;
+  date: string;
+  check_in_time: Date | null;
+  check_out_time: Date | null;
+  break_start_time: Date | null;
+  break_end_time: Date | null;
+  break_duration_minutes: number;
+  status: string;
+  check_in_lat: number | null;
+  check_in_long: number | null;
+  check_out_lat: number | null;
+  check_out_long: number | null;
+  selfie_url: string | null;
+  is_late: boolean;
+  working_hours: number;
+  overtime_hours: number;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -360,19 +380,47 @@ async function startServer() {
         company_id INT NOT NULL,
         employee_id INT NOT NULL,
         date DATE NOT NULL,
-        check_in TIME,
-        check_out TIME,
-        break_time INT DEFAULT 0, -- in minutes
-        status ENUM('Present', 'Absent', 'Leave', 'Half Day') NOT NULL,
+        check_in_time DATETIME,
+        check_out_time DATETIME,
+        break_start_time DATETIME,
+        break_end_time DATETIME,
+        check_in VARCHAR(10),
+        check_out VARCHAR(10),
+        break_time INT DEFAULT 0,
+        check_in_lat DECIMAL(10, 8),
+        check_in_long DECIMAL(11, 8),
+        check_out_lat DECIMAL(10, 8),
+        check_out_long DECIMAL(11, 8),
+        selfie_url LONGTEXT,
+        status ENUM('Present', 'Absent', 'Leave', 'Half Day', 'On Break', 'Checked-Out') DEFAULT 'Checked-Out',
         is_late BOOLEAN DEFAULT FALSE,
         working_hours DECIMAL(5,2) DEFAULT 0,
+        break_duration_minutes INT DEFAULT 0,
         overtime_hours DECIMAL(5,2) DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY emp_date (employee_id, date),
         FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
       )
     `);
+
+    // Remove unique constraint if it exists to allow multi check-ins
+    try {
+      await connection.query("ALTER TABLE attendance DROP INDEX emp_date");
+    } catch { /* Ignore */ }
+
+    // Ensure columns exist and selfie_url is LONGTEXT
+    try {
+      await connection.query("ALTER TABLE attendance MODIFY COLUMN selfie_url LONGTEXT");
+    } catch { /* Ignore */ }
+    try {
+      await connection.query("ALTER TABLE attendance ADD COLUMN check_in VARCHAR(10)");
+    } catch { /* Ignore */ }
+    try {
+      await connection.query("ALTER TABLE attendance ADD COLUMN check_out VARCHAR(10)");
+    } catch { /* Ignore */ }
+    try {
+      await connection.query("ALTER TABLE attendance ADD COLUMN break_time INT DEFAULT 0");
+    } catch { /* Ignore */ }
 
     // Insert default super admin if not exists
     const [existingAdmins] = await connection.query("SELECT * FROM admins WHERE email = 'admin@erp.com'") as [Record<string, unknown>[], unknown];
@@ -399,7 +447,7 @@ async function startServer() {
     try {
       const { company_id } = req.query;
       const connection = await db.getConnection();
-      let query = "SELECT id, name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields, created_at FROM employees";
+      let query = "SELECT id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields, created_at FROM employees";
       const params: (string | number)[] = [];
       
       if (company_id) {
@@ -424,12 +472,12 @@ async function startServer() {
       const { company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields } = req.body;
       const connection = await db.getConnection();
       
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password || '123456', 10);
+      // Hash password - changed to plain text for admin visibility as requested
+      const passwordToStore = password || '123456';
       
       const [result] = await connection.query(
         "INSERT INTO employees (company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [company_id, name, email, hashedPassword, employee_id, department, designation, status || 'active', mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields ? JSON.stringify(custom_fields) : null]
+        [company_id, name, email, passwordToStore, employee_id, department, designation, status || 'active', mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields ? JSON.stringify(custom_fields) : null]
       );
       
       connection.release();
@@ -746,7 +794,11 @@ async function startServer() {
       const connection = await db.getConnection();
       
       let query = `
-        SELECT a.*, e.name as employee_name, e.employee_id as emp_code 
+        SELECT a.*, 
+               COALESCE(a.check_in, DATE_FORMAT(a.check_in_time, '%H:%i')) as check_in,
+               COALESCE(a.check_out, DATE_FORMAT(a.check_out_time, '%H:%i')) as check_out,
+               COALESCE(a.break_time, a.break_duration_minutes) as break_time,
+               e.name as employee_name, e.employee_id as emp_code 
         FROM attendance a
         JOIN employees e ON a.employee_id = e.id
         WHERE a.company_id = ?
@@ -798,6 +850,124 @@ async function startServer() {
       const err = error as Error;
       console.error("Error saving attendance:", err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Employee Attendance API
+  app.post("/api/employee/attendance/action", async (req, res) => {
+    try {
+      const { employee_id, company_id, action, lat, long, selfie_url } = req.body;
+      const connection = await db.getConnection();
+      const date = new Date().toISOString().split('T')[0];
+      const now = new Date();
+
+      const [existing] = await connection.query(
+        "SELECT * FROM attendance WHERE employee_id = ? AND date = ? ORDER BY created_at DESC LIMIT 1",
+        [employee_id, date]
+      ) as [AttendanceRecord[], unknown];
+
+      if (action === 'check-in') {
+        if (existing.length > 0 && existing[0].status !== 'Checked-Out') {
+          return res.status(400).json({ error: "Already checked in. Please check out first." });
+        }
+        await connection.query(
+          `INSERT INTO attendance (company_id, employee_id, date, check_in_time, check_in_lat, check_in_long, selfie_url, status) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [company_id, employee_id, date, now, lat, long, selfie_url, 'Present']
+        );
+      } else if (action === 'check-out') {
+        if (existing.length === 0 || existing[0].status === 'Checked-Out') {
+          return res.status(400).json({ error: "No active check-in found" });
+        }
+        const record = existing[0];
+        const checkIn = new Date(record.check_in_time!);
+        const breakStart = record.break_start_time ? new Date(record.break_start_time) : null;
+        const breakEnd = record.break_end_time ? new Date(record.break_end_time) : null;
+        
+        let breakDuration = record.break_duration_minutes || 0;
+        if (breakStart && !breakEnd) {
+          // If still on break, end it now
+          breakDuration += Math.round((now.getTime() - breakStart.getTime()) / 60000);
+        }
+        
+        const totalDurationMs = now.getTime() - checkIn.getTime();
+        const totalDurationMinutes = Math.round(totalDurationMs / 60000);
+        const workingHours = Math.max(0, (totalDurationMinutes - breakDuration) / 60);
+        
+        await connection.query(
+          "UPDATE attendance SET check_out_time = ?, check_out_lat = ?, check_out_long = ?, status = 'Checked-Out', working_hours = ?, break_duration_minutes = ? WHERE id = ?",
+          [now, lat, long, workingHours.toFixed(2), breakDuration, record.id]
+        );
+      } else if (action === 'break-start') {
+        if (existing.length === 0 || existing[0].status !== 'Present') {
+          return res.status(400).json({ error: "Must be checked in and not on break" });
+        }
+        await connection.query("UPDATE attendance SET break_start_time = ?, status = 'On Break' WHERE id = ?", [now, existing[0].id]);
+      } else if (action === 'break-end') {
+        if (existing.length === 0 || existing[0].status !== 'On Break') {
+          return res.status(400).json({ error: "Not currently on break" });
+        }
+        const record = existing[0];
+        const breakStart = record.break_start_time ? new Date(record.break_start_time) : null;
+        let additionalBreak = 0;
+        if (breakStart) {
+          additionalBreak = Math.round((now.getTime() - breakStart.getTime()) / 60000);
+        }
+        await connection.query(
+          "UPDATE attendance SET break_end_time = ?, status = 'Present', break_duration_minutes = break_duration_minutes + ? WHERE id = ?", 
+          [now, additionalBreak, record.id]
+        );
+      }
+
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error performing attendance action:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/employee/attendance/stats", async (req, res) => {
+    let connection;
+    try {
+      const { employee_id } = req.query;
+      if (!employee_id) {
+        return res.status(400).json({ error: "employee_id is required" });
+      }
+      connection = await db.getConnection();
+      const [rows] = await connection.query(
+        "SELECT * FROM attendance WHERE employee_id = ? AND date >= DATE_SUB(NOW(), INTERVAL 30 DAY) ORDER BY created_at DESC",
+        [employee_id]
+      ) as [AttendanceRecord[], unknown];
+      
+      const data = Array.isArray(rows) ? rows : [];
+      
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      
+      const dailyHours = data
+        .filter(r => r.date.toString().includes(todayStr))
+        .reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);
+      
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(now.getDate() - 7);
+      const weeklyHours = data
+        .filter(r => new Date(r.date) >= oneWeekAgo)
+        .reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);
+        
+      const monthlyHours = data.reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);
+      
+      const lateCount = data.filter((r: AttendanceRecord) => r.is_late).length;
+      const dailyAttendance = data.slice(0, 7); // Last 7 days
+      
+      res.json({ dailyHours, weeklyHours, monthlyHours, lateCount, dailyAttendance });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching attendance stats:", err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -899,12 +1069,12 @@ async function startServer() {
 
   // Employee Login
   app.post("/api/employee/login", async (req, res) => {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
     try {
       const connection = await db.getConnection();
       const [employees] = await connection.query(
-        "SELECT e.*, c.name as company_name FROM employees e JOIN companies c ON e.company_id = c.id WHERE e.email = ? AND e.password = ? AND e.status = 'active'",
-        [email, password]
+        "SELECT e.*, c.name as company_name FROM employees e JOIN companies c ON e.company_id = c.id WHERE e.username = ? AND e.password = ? AND e.status = 'active'",
+        [username, password]
       ) as [Record<string, unknown>[], unknown];
       connection.release();
 

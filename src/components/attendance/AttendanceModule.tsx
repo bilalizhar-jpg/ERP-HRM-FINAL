@@ -26,10 +26,15 @@ interface AttendanceRecord {
   check_in: string | null;
   check_out: string | null;
   break_time: number;
-  status: 'Present' | 'Absent' | 'Leave' | 'Half Day' | 'Not Marked';
+  status: 'Present' | 'Absent' | 'Leave' | 'Half Day' | 'Not Marked' | 'On Break' | 'Checked-Out';
   is_late: boolean;
   working_hours: number;
   overtime_hours: number;
+  selfie_url?: string | null;
+  created_at?: string;
+  check_in_time?: string | null;
+  check_out_time?: string | null;
+  break_duration_minutes?: number;
 }
 
 interface AttendanceModuleProps {
@@ -57,6 +62,7 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
   // Filters
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [selectedSelfie, setSelectedSelfie] = useState<string | null>(null);
 
   // Config
   const OFFICE_START_TIME = '09:00';
@@ -269,8 +275,21 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
 
   // Merge employees with attendance data for daily view
   const dailyAttendanceView = employees.map(emp => {
-    const record = attendanceData.find(a => a.employee_id === emp.id);
-    if (record) return record;
+    const records = attendanceData.filter(a => a.employee_id === emp.id);
+    if (records.length > 0) {
+      const sortedByCreated = [...records].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      const sortedByCheckIn = [...records].filter(r => r.check_in_time).sort((a, b) => new Date(a.check_in_time!).getTime() - new Date(b.check_in_time!).getTime());
+      const sortedByCheckOut = [...records].filter(r => r.check_out_time).sort((a, b) => new Date(b.check_out_time!).getTime() - new Date(a.check_out_time!).getTime());
+
+      return {
+        ...sortedByCreated[0],
+        working_hours: records.reduce((sum, r) => sum + Number(r.working_hours || 0), 0),
+        break_duration_minutes: records.reduce((sum, r) => sum + Number(r.break_duration_minutes || 0), 0),
+        status: sortedByCreated[0].status,
+        check_in_time: sortedByCheckIn.length > 0 ? sortedByCheckIn[0].check_in_time : null,
+        check_out_time: sortedByCheckOut.length > 0 ? sortedByCheckOut[sortedByCheckOut.length - 1].check_out_time : null,
+      };
+    }
     
     // Return a dummy record for missing attendance
     return {
@@ -285,7 +304,8 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
       status: 'Not Marked',
       is_late: false,
       working_hours: 0,
-      overtime_hours: 0
+      overtime_hours: 0,
+      selfie_url: null
     };
   });
 
@@ -539,6 +559,7 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
                         <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
                         <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Check In</th>
                         <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Check Out</th>
+                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Selfie</th>
                         <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Late</th>
                         <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Hours</th>
                       </tr>
@@ -567,6 +588,18 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
                             </td>
                             <td className="py-4 px-6 text-sm text-slate-600">{record.check_in || '-'}</td>
                             <td className="py-4 px-6 text-sm text-slate-600">{record.check_out || '-'}</td>
+                            <td className="py-4 px-6">
+                              {record.selfie_url ? (
+                                <button 
+                                  onClick={() => setSelectedSelfie(record.selfie_url || null)}
+                                  className="text-blue-600 hover:text-blue-800 font-bold text-xs uppercase tracking-widest"
+                                >
+                                  View
+                                </button>
+                              ) : (
+                                <span className="text-slate-400 text-xs">-</span>
+                              )}
+                            </td>
                             <td className="py-4 px-6">
                               {record.is_late ? (
                                 <span className="text-rose-600 font-bold text-sm">Yes</span>
@@ -837,6 +870,25 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Selfie Modal */}
+      {selectedSelfie && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[60] p-4" onClick={() => setSelectedSelfie(null)}>
+          <div className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-md w-full relative" onClick={e => e.stopPropagation()}>
+            <button 
+              onClick={() => setSelectedSelfie(null)}
+              className="absolute top-4 right-4 bg-white/20 hover:bg-white/40 backdrop-blur-md text-white rounded-full p-2 transition-colors z-10"
+            >
+              <XCircle size={24} />
+            </button>
+            <img src={selectedSelfie} alt="Attendance Selfie" className="w-full h-auto" referrerPolicy="no-referrer" />
+            <div className="p-6 bg-white">
+              <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Attendance Verification</h3>
+              <p className="text-slate-500 text-sm mt-1">Selfie captured during check-in for identity verification.</p>
+            </div>
           </div>
         </div>
       )}
