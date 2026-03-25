@@ -193,6 +193,33 @@ async function startServer() {
       )
     `);
 
+    // Create departments table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS departments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        head_of_department VARCHAR(255) NOT NULL,
+        status ENUM('active', 'inactive') DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create designations table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS designations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        department_id INT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        status ENUM('active', 'inactive') DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+      )
+    `);
+
     // Create employees table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS employees (
@@ -207,6 +234,39 @@ async function startServer() {
         status ENUM('active', 'inactive') DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create employer_permissions table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS employer_permissions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        module_name VARCHAR(255) NOT NULL,
+        is_granted BOOLEAN DEFAULT TRUE,
+        UNIQUE KEY comp_mod (company_id, module_name),
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create attendance table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS attendance (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        employee_id INT NOT NULL,
+        date DATE NOT NULL,
+        check_in TIME,
+        check_out TIME,
+        break_time INT DEFAULT 0, -- in minutes
+        status ENUM('Present', 'Absent', 'Leave', 'Half Day') NOT NULL,
+        is_late BOOLEAN DEFAULT FALSE,
+        working_hours DECIMAL(5,2) DEFAULT 0,
+        overtime_hours DECIMAL(5,2) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY emp_date (employee_id, date),
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
       )
     `);
 
@@ -227,6 +287,298 @@ async function startServer() {
       const err = error as Error;
       console.error("Database initialization error:", err);
       res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Employees API
+  app.get("/api/employees", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      const connection = await db.getConnection();
+      let query = "SELECT id, name, employee_id, department, designation FROM employees";
+      const params: (string | number)[] = [];
+      
+      if (company_id) {
+        query += " WHERE company_id = ?";
+        params.push(company_id as string);
+      }
+      
+      const [rows] = await connection.query(query, params);
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching employees:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Departments API
+  app.get("/api/departments", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      if (!company_id) {
+        return res.status(400).json({ error: "company_id is required" });
+      }
+      
+      const connection = await db.getConnection();
+      const [rows] = await connection.query("SELECT * FROM departments WHERE company_id = ? ORDER BY created_at DESC", [company_id]);
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching departments:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/departments", async (req, res) => {
+    try {
+      const { company_id, name, head_of_department, status } = req.body;
+      const connection = await db.getConnection();
+      
+      const [result] = await connection.query(
+        "INSERT INTO departments (company_id, name, head_of_department, status) VALUES (?, ?, ?, ?)",
+        [company_id, name, head_of_department, status || 'active']
+      );
+      
+      connection.release();
+      res.json({ success: true, id: (result as { insertId: number }).insertId });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error creating department:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/departments/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, head_of_department, status } = req.body;
+      const connection = await db.getConnection();
+      
+      await connection.query(
+        "UPDATE departments SET name = ?, head_of_department = ?, status = ? WHERE id = ?",
+        [name, head_of_department, status, id]
+      );
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error updating department:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/departments/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const connection = await db.getConnection();
+      
+      await connection.query("DELETE FROM departments WHERE id = ?", [id]);
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error deleting department:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Designations API
+  app.get("/api/designations", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      if (!company_id) {
+        return res.status(400).json({ error: "company_id is required" });
+      }
+      
+      const connection = await db.getConnection();
+      const [rows] = await connection.query(`
+        SELECT d.*, dep.name as department_name 
+        FROM designations d
+        JOIN departments dep ON d.department_id = dep.id
+        WHERE d.company_id = ? 
+        ORDER BY d.created_at DESC
+      `, [company_id]);
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching designations:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/designations", async (req, res) => {
+    try {
+      const { company_id, department_id, name, status } = req.body;
+      const connection = await db.getConnection();
+      
+      const [result] = await connection.query(
+        "INSERT INTO designations (company_id, department_id, name, status) VALUES (?, ?, ?, ?)",
+        [company_id, department_id, name, status || 'active']
+      );
+      
+      connection.release();
+      res.json({ success: true, id: (result as { insertId: number }).insertId });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error creating designation:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/designations/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { department_id, name, status } = req.body;
+      const connection = await db.getConnection();
+      
+      await connection.query(
+        "UPDATE designations SET department_id = ?, name = ?, status = ? WHERE id = ?",
+        [department_id, name, status, id]
+      );
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error updating designation:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/designations/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const connection = await db.getConnection();
+      
+      await connection.query("DELETE FROM designations WHERE id = ?", [id]);
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error deleting designation:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Attendance API
+  app.get("/api/attendance", async (req, res) => {
+    try {
+      const { company_id, date, start, end } = req.query;
+      const connection = await db.getConnection();
+      
+      let query = `
+        SELECT a.*, e.name as employee_name, e.employee_id as emp_code 
+        FROM attendance a
+        JOIN employees e ON a.employee_id = e.id
+        WHERE a.company_id = ?
+      `;
+      const params: (string | number)[] = [company_id as string];
+      
+      if (date) {
+        query += " AND a.date = ?";
+        params.push(date);
+      } else if (start && end) {
+        query += " AND a.date >= ? AND a.date <= ?";
+        params.push(start, end);
+      }
+      
+      query += " ORDER BY a.date DESC, e.name ASC";
+      
+      const [rows] = await connection.query(query, params);
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching attendance:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/attendance", async (req, res) => {
+    try {
+      const { company_id, employee_id, date, check_in, check_out, break_time, status, is_late, working_hours, overtime_hours } = req.body;
+      const connection = await db.getConnection();
+      
+      // Upsert attendance record
+      await connection.query(`
+        INSERT INTO attendance (company_id, employee_id, date, check_in, check_out, break_time, status, is_late, working_hours, overtime_hours)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          check_in = VALUES(check_in),
+          check_out = VALUES(check_out),
+          break_time = VALUES(break_time),
+          status = VALUES(status),
+          is_late = VALUES(is_late),
+          working_hours = VALUES(working_hours),
+          overtime_hours = VALUES(overtime_hours)
+      `, [company_id, employee_id, date, check_in || null, check_out || null, break_time || 0, status, is_late || false, working_hours || 0, overtime_hours || 0]);
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error saving attendance:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Employer Permissions API
+  app.get("/api/employer-permissions", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      const connection = await db.getConnection();
+      let query = "SELECT * FROM employer_permissions";
+      const params: (string | number)[] = [];
+      
+      if (company_id) {
+        query += " WHERE company_id = ?";
+        params.push(company_id);
+      }
+      
+      const [rows] = await connection.query(query, params);
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching permissions:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/employer-permissions", async (req, res) => {
+    const { permissions } = req.body; // Array of { company_id, module_name, is_granted }
+    
+    if (!Array.isArray(permissions)) {
+      return res.status(400).json({ error: "Invalid data format" });
+    }
+
+    try {
+      const connection = await db.getConnection();
+      await connection.beginTransaction();
+
+      for (const perm of permissions) {
+        await connection.query(
+          `INSERT INTO employer_permissions (company_id, module_name, is_granted) 
+           VALUES (?, ?, ?) 
+           ON DUPLICATE KEY UPDATE is_granted = VALUES(is_granted)`,
+          [perm.company_id, perm.module_name, perm.is_granted]
+        );
+      }
+
+      await connection.commit();
+      connection.release();
+      res.json({ success: true, message: "Permissions saved successfully" });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error saving permissions:", err);
+      res.status(500).json({ error: err.message });
     }
   });
 

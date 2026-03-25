@@ -23,8 +23,28 @@ import Invoices from './pages/Invoices';
 import Connection from './pages/Connection';
 import GmailIntegration from './pages/GmailIntegration';
 import WhatsAppIntegration from './pages/WhatsAppIntegration';
+import EmployerDashboard from './pages/employer/EmployerDashboard';
+import TimeTrack from './pages/employer/TimeTrack';
+import Attendance from './pages/employer/Attendance';
+import Department from './pages/employer/Department';
+import Designation from './pages/employer/Designation';
+import Leave from './pages/employer/Leave';
+import Payroll from './pages/employer/Payroll';
+import Shifts from './pages/employer/Shifts';
+import Performance from './pages/employer/Performance';
+import Recruitment from './pages/employer/Recruitment';
+import Training from './pages/employer/Training';
+import Assets from './pages/employer/Assets';
+import Expenses from './pages/employer/Expenses';
+import Reports from './pages/employer/Reports';
+import Settings from './pages/employer/Settings';
+import EmployerPermissions from './pages/EmployerPermissions';
 import CompanyAdminLogin from './pages/CompanyAdminLogin';
 import CompanyAdminDashboard from './pages/CompanyAdminDashboard';
+import CompanyAdminLayout from './components/CompanyAdminLayout';
+import CompanyAdminAttendance from './pages/CompanyAdminAttendance';
+import CompanyAdminDepartment from './pages/CompanyAdminDepartment';
+import CompanyAdminDesignation from './pages/CompanyAdminDesignation';
 import EmployeeLogin from './pages/EmployeeLogin';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 
@@ -64,8 +84,30 @@ function App() {
         <Route path="/super-admin/connection" element={<Connection />} />
         <Route path="/super-admin/gmail" element={<GmailIntegration />} />
         <Route path="/super-admin/whatsapp" element={<WhatsAppIntegration />} />
+        <Route path="/super-admin/permissions" element={<EmployerPermissions />} />
+        <Route path="/super-admin/employer/dashboard" element={<EmployerDashboard />} />
+        <Route path="/super-admin/employer/time-track" element={<TimeTrack />} />
+        <Route path="/super-admin/employer/department" element={<Department />} />
+        <Route path="/super-admin/employer/designation" element={<Designation />} />
+        <Route path="/super-admin/employer/attendance" element={<Attendance />} />
+        <Route path="/super-admin/employer/leaves" element={<Leave />} />
+        <Route path="/super-admin/employer/payroll" element={<Payroll />} />
+        <Route path="/super-admin/employer/shifts" element={<Shifts />} />
+        <Route path="/super-admin/employer/performance" element={<Performance />} />
+        <Route path="/super-admin/employer/recruitment" element={<Recruitment />} />
+        <Route path="/super-admin/employer/training" element={<Training />} />
+        <Route path="/super-admin/employer/assets" element={<Assets />} />
+        <Route path="/super-admin/employer/expenses" element={<Expenses />} />
+        <Route path="/super-admin/employer/reports" element={<Reports />} />
+        <Route path="/super-admin/employer/settings" element={<Settings />} />
         <Route path="/company-admin" element={<CompanyAdminLogin />} />
-        <Route path="/company-admin/dashboard" element={<CompanyAdminDashboard />} />
+        <Route path="/company-admin" element={<CompanyAdminLayout />}>
+          <Route path="dashboard" element={<CompanyAdminDashboard />} />
+          <Route path="attendance" element={<CompanyAdminAttendance />} />
+          <Route path="department" element={<CompanyAdminDepartment />} />
+          <Route path="designation" element={<CompanyAdminDesignation />} />
+          {/* Add more routes here as needed */}
+        </Route>
         <Route path="/employee" element={<EmployeeLogin />} />
         <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
       </Routes>

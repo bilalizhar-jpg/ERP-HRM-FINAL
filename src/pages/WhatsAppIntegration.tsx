@@ -1,13 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
-  Shield, 
-  LayoutDashboard, 
-  Building2, 
-  CreditCard, 
-  ShieldCheck, 
   Maximize2, 
   Search,
-  Mail,
   MessageSquare,
   QrCode,
   RefreshCw,
@@ -18,6 +12,7 @@ import {
   Loader2,
   Trash2
 } from 'lucide-react';
+import SuperAdminSidebar from '../components/SuperAdminSidebar';
 
 interface Company {
   id: number;
@@ -151,45 +146,10 @@ export default function WhatsAppIntegration() {
     }
   };
 
-  const menuItems = [
-    { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard, path: '/super-admin/dashboard' },
-    { id: 'companies', label: 'COMPANIES', icon: Building2, path: '/super-admin/companies' },
-    { id: 'plans', label: 'SUBSCRIPTION PLANS', icon: CreditCard, path: '/super-admin/plans' },
-    { id: 'invoice', label: 'INVOICE', icon: FileText, path: '/super-admin/invoice' },
-    { id: 'connection', label: 'CONNECTION', icon: Link2, path: '/super-admin/connection' },
-    { id: 'gmail', label: 'GMAIL INTEGRATION', icon: Mail, path: '/super-admin/gmail' },
-    { id: 'whatsapp', label: 'WHATSAPP INTEGRATION', icon: MessageSquare, active: true, path: '/super-admin/whatsapp' },
-    { id: 'permissions', label: 'EMPLOYER PANEL PERMISSIONS', icon: ShieldCheck, path: '/super-admin/permissions' },
-  ];
-
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex">
       {/* Sidebar */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen z-40">
-        <div className="p-6 flex items-center gap-3 border-b border-slate-100">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
-            <Shield size={22} />
-          </div>
-          <span className="font-black text-xl tracking-tight uppercase">SUPER ADMIN</span>
-        </div>
-        
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          {menuItems.map((item) => (
-            <a
-              key={item.id}
-              href={item.path}
-              className={`flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 ${
-                item.active 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
-                  : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
-              }`}
-            >
-              <item.icon size={20} />
-              <span className="tracking-wide">{item.label}</span>
-            </a>
-          ))}
-        </nav>
-      </aside>
+      <SuperAdminSidebar />
 
       {/* Main Content */}
       <main className="flex-1 p-12">
@@ -371,8 +331,3 @@ export default function WhatsAppIntegration() {
     </div>
   );
 }
-
-const FileText = ({ size, className }: { size?: number, className?: string }) => <FileTextIcon size={size} className={className} />;
-const Link2 = ({ size, className }: { size?: number, className?: string }) => <Link2Icon size={size} className={className} />;
-
-import { FileText as FileTextIcon, Link2 as Link2Icon } from 'lucide-react';

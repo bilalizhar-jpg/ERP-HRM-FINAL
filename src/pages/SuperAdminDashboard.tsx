@@ -1,23 +1,16 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
-  Shield, 
-  LayoutDashboard, 
   Building2, 
   Users, 
-  CreditCard, 
-  ShieldCheck, 
   Maximize2, 
   Menu, 
   AlertCircle,
   Database,
-  Search,
-  FileText,
-  Link2,
-  Mail,
-  MessageSquare
+  Search
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+import SuperAdminSidebar from '../components/SuperAdminSidebar';
 
 interface Company {
   id: number;
@@ -37,7 +30,6 @@ export default function SuperAdminDashboard() {
     tables?: string[];
     isInitialized?: boolean;
   } | null>(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     const checkDb = async () => {
@@ -65,69 +57,10 @@ export default function SuperAdminDashboard() {
     checkDb();
   }, []);
 
-  const menuItems = [
-    { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard, active: true, path: '/super-admin/dashboard' },
-    { id: 'companies', label: 'COMPANIES', icon: Building2, path: '/super-admin/companies' },
-    { id: 'plans', label: 'SUBSCRIPTION PLANS', icon: CreditCard, path: '/super-admin/plans' },
-    { id: 'invoice', label: 'INVOICE', icon: FileText, path: '/super-admin/invoice' },
-    { id: 'connection', label: 'CONNECTION', icon: Link2, path: '/super-admin/connection' },
-    { id: 'gmail', label: 'GMAIL INTEGRATION', icon: Mail, path: '/super-admin/gmail' },
-    { id: 'whatsapp', label: 'WHATSAPP INTEGRATION', icon: MessageSquare, path: '/super-admin/whatsapp' },
-    { id: 'permissions', label: 'EMPLOYER PANEL PERMISSIONS', icon: ShieldCheck, path: '/super-admin/permissions' },
-  ];
-
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex">
       {/* Sidebar */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen z-40">
-        <div className="p-6 flex items-center gap-3 border-b border-slate-100">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
-            <Shield size={22} />
-          </div>
-          <span className="font-black text-xl tracking-tight uppercase">SUPER ADMIN</span>
-        </div>
-
-        <div className="flex-1 overflow-y-auto py-6 px-4">
-          <div className="mb-8">
-            <p className="text-[10px] font-bold text-slate-400 tracking-[0.2em] px-4 mb-4 uppercase">CORE PROTOCOL</p>
-            <nav className="space-y-1">
-              {menuItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => navigate(item.path)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                    item.active 
-                      ? 'bg-blue-50 text-blue-600 font-bold border-l-4 border-blue-600' 
-                      : 'text-slate-500 hover:bg-slate-50'
-                  }`}
-                >
-                  <item.icon size={18} className={item.active ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'} />
-                  <span className="text-[11px] tracking-wider uppercase">{item.label}</span>
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 tracking-[0.2em] px-4 mb-4 uppercase">Employee Rules</p>
-            <nav className="space-y-1">
-              <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 transition-all">
-                <LayoutDashboard size={18} className="text-slate-400" />
-                <span className="text-[11px] tracking-wider uppercase">Node Dashboard</span>
-              </button>
-            </nav>
-          </div>
-        </div>
-
-        <div className="p-4 border-t border-slate-100">
-          <button 
-            onClick={() => navigate('/')}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
-          >
-            Exit to Site
-          </button>
-        </div>
-      </aside>
+      <SuperAdminSidebar />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
