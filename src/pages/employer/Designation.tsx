@@ -1,11 +1,6 @@
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
-import DesignationModule from '../../components/department/DesignationModule';
 
 export default function Designation() {
-  // In a real app, you would get the company ID from the context or URL
-  // For now, we'll assume company ID 1 for super admin testing
-  const companyId = 1;
-
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex">
       <SuperAdminSidebar />
@@ -16,7 +11,10 @@ export default function Designation() {
           <p className="text-slate-500 font-medium">Manage company designations.</p>
         </header>
 
-        <DesignationModule companyId={companyId} />
+        <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center">
+          <h2 className="text-xl font-bold text-slate-900 mb-2">Module Managed by Employer</h2>
+          <p className="text-slate-500">This module is for employer-specific data. Designations are managed directly by employers in their respective portals.</p>
+        </div>
       </main>
     </div>
   );

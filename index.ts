@@ -1042,13 +1042,13 @@ async function startServer() {
       const [leaves] = await connection.query(
         "SELECT * FROM leaves WHERE employee_id = ? ORDER BY created_at DESC",
         [employee_id]
-      ) as [Record<string, any>[], unknown];
+      ) as [Record<string, unknown>[], unknown];
       
       // Notes
       const [notes] = await connection.query(
         "SELECT * FROM notes WHERE employee_id = ? ORDER BY date DESC",
         [employee_id]
-      ) as [Record<string, any>[], unknown];
+      ) as [Record<string, unknown>[], unknown];
 
       // Calculate stats
       const workedTimeToday = todayAttendance.reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);

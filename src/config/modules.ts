@@ -27,7 +27,22 @@ import {
   Settings
 } from 'lucide-react';
 
-export const employerModules = [
+import { LucideIcon } from 'lucide-react';
+
+export interface SubItem {
+  name: string;
+  path: string;
+}
+
+export interface ModuleItem {
+  name: string;
+  icon: LucideIcon;
+  path: string;
+  hasDropdown?: boolean;
+  subItems?: SubItem[];
+}
+
+export const employerModules: ModuleItem[] = [
   { name: 'DASHBOARD', icon: LayoutDashboard, path: '/super-admin/employer/dashboard' },
   { name: 'TIME TRACK', icon: Clock, path: '/super-admin/employer/time-track' },
   { name: 'ORG CHART', icon: Network, path: '/super-admin/employer/org-chart', hasDropdown: true },
@@ -54,5 +69,18 @@ export const employerModules = [
   { name: 'ACCOUNTING', icon: Receipt, path: '/super-admin/employer/accounting' },
   { name: 'CRM', icon: UsersRound, path: '/super-admin/employer/crm', hasDropdown: true },
   { name: 'PURCHASE DEP', icon: ShoppingBag, path: '/super-admin/employer/purchase' },
-  { name: 'SETTINGS', icon: Settings, path: '/super-admin/employer/settings', hasDropdown: true },
+  { 
+    name: 'SETTINGS', 
+    icon: Settings, 
+    path: '/super-admin/employer/settings', 
+    hasDropdown: true,
+    subItems: [
+      { name: 'GENERAL SETTINGS', path: '/general' },
+      { name: 'GMAIL INTEGRATION', path: '/gmail' },
+      { name: 'WHATSAPP INTEGRATION', path: '/whatsapp' },
+      { name: 'RULES', path: '/rules' },
+      { name: 'ROLES & PERMISSIONS', path: '/roles-permissions' },
+      { name: 'MENU PERMISSIONS', path: '/menu-permissions' },
+    ]
+  },
 ];

@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown } from 'lucide-react';
-import { employerModules } from '../config/modules';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ChevronDown, LogOut } from 'lucide-react';
+import { employerModules, ModuleItem, SubItem } from '../config/modules';
 
-const menuItems = employerModules.map(module => ({
+const menuItems: ModuleItem[] = employerModules.map(module => ({
   ...module,
   path: module.path.replace('/super-admin/employer', '/company-admin')
 }));
 
 export default function CompanyAdminSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [openDropdowns, setOpenDropdowns] = useState<string[]>([]);
   const [allowedModules, setAllowedModules] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +56,11 @@ export default function CompanyAdminSidebar() {
   };
 
   const visibleMenuItems = menuItems.filter(item => allowedModules.includes(item.name));
+
+  const handleExitToSite = () => {
+    localStorage.removeItem('companyAdmin');
+    navigate('/');
+  };
 
   if (loading) {
     return (
@@ -108,25 +114,58 @@ export default function CompanyAdminSidebar() {
                   </Link>
                 )}
                 
-                {/* Placeholder for dropdown content */}
+                {/* Dropdown content */}
                 {item.hasDropdown && isOpen && (
-                  <ul className="mt-1 mb-2 ml-12 space-y-1">
-                    <li>
-                      <Link to={`${item.path}/overview`} className="block px-4 py-2 text-sm text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium">
-                        Overview
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to={`${item.path}/manage`} className="block px-4 py-2 text-sm text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium">
-                        Manage
-                      </Link>
-                    </li>
+                  <ul className="mt-1 mb-2 ml-12 space-y-1 border-l border-slate-100">
+                    {item.subItems ? (
+                      item.subItems.map((subItem: SubItem) => {
+                        const subPath = `${item.path}${subItem.path}`;
+                        const isSubActive = location.pathname === subPath;
+                        return (
+                          <li key={subItem.name}>
+                            <Link 
+                              to={subPath} 
+                              className={`block px-4 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors rounded-lg ${
+                                isSubActive 
+                                  ? 'bg-blue-50 text-blue-700' 
+                                  : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              {subItem.name}
+                            </Link>
+                          </li>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <li>
+                          <Link to={`${item.path}/overview`} className="block px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-colors">
+                            Overview
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to={`${item.path}/manage`} className="block px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-colors">
+                            Manage
+                          </Link>
+                        </li>
+                      </>
+                    )}
                   </ul>
                 )}
               </li>
             );
           })}
         </ul>
+      </div>
+
+      <div className="p-4 border-t border-slate-100">
+        <button
+          onClick={handleExitToSite}
+          className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-colors group"
+        >
+          <LogOut size={20} className="text-red-500 group-hover:text-red-600" strokeWidth={2} />
+          <span className="text-sm font-bold tracking-wide">EXIT TO SITE</span>
+        </button>
       </div>
     </div>
   );

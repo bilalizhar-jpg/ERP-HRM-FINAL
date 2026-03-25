@@ -10,10 +10,11 @@ import {
   Link2, 
   Mail, 
   MessageSquare,
-  ChevronDown
+  ChevronDown,
+  LogOut
 } from 'lucide-react';
 
-import { employerModules } from '../config/modules';
+import { employerModules, SubItem } from '../config/modules';
 
 export default function SuperAdminSidebar() {
   const navigate = useNavigate();
@@ -24,6 +25,11 @@ export default function SuperAdminSidebar() {
     setOpenDropdowns(prev => 
       prev.includes(name) ? prev.filter(item => item !== name) : [...prev, name]
     );
+  };
+
+  const handleExitToSite = () => {
+    localStorage.removeItem('superAdmin');
+    navigate('/');
   };
 
   const coreMenuItems = [
@@ -112,17 +118,35 @@ export default function SuperAdminSidebar() {
                   )}
                   
                   {item.hasDropdown && isOpen && (
-                    <ul className="mt-1 mb-2 ml-10 space-y-1">
-                      <li>
-                        <button onClick={() => navigate(`${item.path}/overview`)} className="w-full text-left px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-bold">
-                          Overview
-                        </button>
-                      </li>
-                      <li>
-                        <button onClick={() => navigate(`${item.path}/manage`)} className="w-full text-left px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-bold">
-                          Manage
-                        </button>
-                      </li>
+                    <ul className="mt-1 mb-2 ml-10 space-y-1 border-l border-slate-100">
+                      {item.subItems ? (
+                        item.subItems.map((subItem: SubItem) => {
+                          const subPath = `${item.path}${subItem.path}`;
+                          return (
+                            <li key={subItem.name}>
+                              <button 
+                                onClick={() => navigate(subPath)} 
+                                className="w-full text-left px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-colors font-bold"
+                              >
+                                {subItem.name}
+                              </button>
+                            </li>
+                          );
+                        })
+                      ) : (
+                        <>
+                          <li>
+                            <button onClick={() => navigate(`${item.path}/overview`)} className="w-full text-left px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-colors font-bold">
+                              Overview
+                            </button>
+                          </li>
+                          <li>
+                            <button onClick={() => navigate(`${item.path}/manage`)} className="w-full text-left px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-colors font-bold">
+                              Manage
+                            </button>
+                          </li>
+                        </>
+                      )}
                     </ul>
                   )}
                 </div>
@@ -134,10 +158,11 @@ export default function SuperAdminSidebar() {
 
       <div className="p-4 border-t border-slate-100">
         <button 
-          onClick={() => navigate('/')}
+          onClick={handleExitToSite}
           className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
         >
-          Exit to Site
+          <LogOut size={16} />
+          EXIT TO SITE
         </button>
       </div>
     </aside>

@@ -1,8 +1,15 @@
-import { Outlet, Link } from 'react-router-dom';
+import { Outlet, Link, useNavigate } from 'react-router-dom';
 import CompanyAdminSidebar from './CompanyAdminSidebar';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, LogOut } from 'lucide-react';
 
 export default function CompanyAdminLayout() {
+  const navigate = useNavigate();
+
+  const handleExitToSite = () => {
+    localStorage.removeItem('companyAdmin');
+    navigate('/');
+  };
+
   return (
     <div className="flex h-screen bg-[#f8f9fa] overflow-hidden">
       <CompanyAdminSidebar />
@@ -18,6 +25,13 @@ export default function CompanyAdminLayout() {
             </Link>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={handleExitToSite}
+              className="flex items-center gap-2 text-slate-500 hover:text-blue-600 font-bold text-xs transition-colors px-3 py-2 rounded-lg hover:bg-blue-50"
+            >
+              <LogOut size={16} />
+              EXIT TO SITE
+            </button>
             <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
               A
             </div>
