@@ -1,8 +1,14 @@
-import { Outlet, Link } from 'react-router-dom';
+import { Outlet, Link, useNavigate } from 'react-router-dom';
 import EmployeeSidebar from './EmployeeSidebar';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, LogOut } from 'lucide-react';
 
 export default function EmployeeLayout() {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('employee');
+    navigate('/employee/login');
+  };
   return (
     <div className="flex h-screen bg-[#f8f9fa] overflow-hidden">
       <EmployeeSidebar />
@@ -18,6 +24,13 @@ export default function EmployeeLayout() {
             </Link>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-rose-600 hover:text-rose-700 font-bold text-sm transition-colors"
+            >
+              <LogOut size={16} />
+              LOGOUT
+            </button>
             <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
               E
             </div>

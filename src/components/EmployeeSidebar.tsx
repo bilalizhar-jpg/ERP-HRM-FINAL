@@ -1,8 +1,14 @@
-import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, CalendarCheck } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, CalendarCheck, LogOut } from 'lucide-react';
 
 export default function EmployeeSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('employee');
+    navigate('/employee/login');
+  };
 
   const menuItems = [
     { name: 'Dashboard', path: '/employee/dashboard', icon: LayoutDashboard },
@@ -36,6 +42,16 @@ export default function EmployeeSidebar() {
             );
           })}
         </ul>
+      </div>
+
+      <div className="p-6 border-t border-slate-100">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors font-bold tracking-wide"
+        >
+          <LogOut size={20} strokeWidth={2} />
+          <span className="text-sm">Logout</span>
+        </button>
       </div>
     </div>
   );

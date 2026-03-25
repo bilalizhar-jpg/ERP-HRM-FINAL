@@ -36,6 +36,7 @@ interface AttendanceRecord {
   is_late: boolean;
   working_hours: number;
   overtime_hours: number;
+  created_at?: Date;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -421,6 +422,37 @@ async function startServer() {
     try {
       await connection.query("ALTER TABLE attendance ADD COLUMN break_time INT DEFAULT 0");
     } catch { /* Ignore */ }
+
+    // Create leaves table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS leaves (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        employee_id INT NOT NULL,
+        leave_type VARCHAR(100) NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        reason TEXT,
+        status ENUM('Pending', 'Approved', 'Rejected') DEFAULT 'Pending',
+        total_days INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create notes table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS notes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        title VARCHAR(255),
+        content TEXT,
+        date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
 
     // Insert default super admin if not exists
     const [existingAdmins] = await connection.query("SELECT * FROM admins WHERE email = 'admin@erp.com'") as [Record<string, unknown>[], unknown];
@@ -855,9 +887,16 @@ async function startServer() {
 
   // Employee Attendance API
   app.post("/api/employee/attendance/action", async (req, res) => {
+    let connection;
     try {
       const { employee_id, company_id, action, lat, long, selfie_url } = req.body;
-      const connection = await db.getConnection();
+      console.log(`[Attendance API] Action: ${action}, Employee: ${employee_id}, Company: ${company_id}`);
+      
+      if (!employee_id || !company_id || !action) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      connection = await db.getConnection();
       const date = new Date().toISOString().split('T')[0];
       const now = new Date();
 
@@ -865,6 +904,8 @@ async function startServer() {
         "SELECT * FROM attendance WHERE employee_id = ? AND date = ? ORDER BY created_at DESC LIMIT 1",
         [employee_id, date]
       ) as [AttendanceRecord[], unknown];
+
+      console.log(`[Attendance API] Existing record status: ${existing.length > 0 ? existing[0].status : 'None'}`);
 
       if (action === 'check-in') {
         if (existing.length > 0 && existing[0].status !== 'Checked-Out') {
@@ -919,12 +960,13 @@ async function startServer() {
         );
       }
 
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error performing attendance action:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -965,6 +1007,120 @@ async function startServer() {
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching attendance stats:", err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.get("/api/employee/dashboard/stats", async (req, res) => {
+    let connection;
+    try {
+      const { employee_id, company_id } = req.query;
+      if (!employee_id || !company_id) {
+        return res.status(400).json({ error: "employee_id and company_id are required" });
+      }
+      connection = await db.getConnection();
+      
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      
+      // Today's attendance
+      const [todayAttendance] = await connection.query(
+        "SELECT * FROM attendance WHERE employee_id = ? AND date = ? ORDER BY created_at DESC",
+        [employee_id, todayStr]
+      ) as [AttendanceRecord[], unknown];
+      
+      // Monthly attendance
+      const [monthlyAttendance] = await connection.query(
+        "SELECT * FROM attendance WHERE employee_id = ? AND date >= ? ORDER BY date DESC",
+        [employee_id, startOfMonth]
+      ) as [AttendanceRecord[], unknown];
+      
+      // Leaves
+      const [leaves] = await connection.query(
+        "SELECT * FROM leaves WHERE employee_id = ? ORDER BY created_at DESC",
+        [employee_id]
+      ) as [Record<string, any>[], unknown];
+      
+      // Notes
+      const [notes] = await connection.query(
+        "SELECT * FROM notes WHERE employee_id = ? ORDER BY date DESC",
+        [employee_id]
+      ) as [Record<string, any>[], unknown];
+
+      // Calculate stats
+      const workedTimeToday = todayAttendance.reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);
+      const breakTimeToday = todayAttendance.reduce((acc, curr) => acc + (curr.break_duration_minutes || 0), 0);
+      
+      const monthlyWorkedTime = monthlyAttendance.reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);
+      const monthlyBreakTime = monthlyAttendance.reduce((acc, curr) => acc + (curr.break_duration_minutes || 0), 0);
+      const monthlyLateCount = monthlyAttendance.filter(r => r.is_late).length;
+      const monthlyOvertime = monthlyAttendance.reduce((acc, curr) => acc + parseFloat(String(curr.overtime_hours || 0)), 0);
+      
+      const totalLeavesDays = leaves.filter(l => l.status === 'Approved').reduce((acc, curr) => acc + curr.total_days, 0);
+
+      res.json({
+        today: {
+          punchIn: todayAttendance.length > 0 ? [...todayAttendance].sort((a, b) => new Date(a.check_in_time).getTime() - new Date(b.check_in_time).getTime())[0].check_in_time : null,
+          punchOut: todayAttendance.length > 0 ? [...todayAttendance].sort((a, b) => new Date(b.check_out_time || 0).getTime() - new Date(a.check_out_time || 0).getTime())[0].check_out_time : null,
+          workedTime: workedTimeToday,
+          breakTime: breakTimeToday / 60,
+          scheduled: 9, // Example scheduled hours
+          leftTime: Math.max(0, 9 - workedTimeToday)
+        },
+        monthly: {
+          scheduled: 22 * 9, // Example monthly scheduled hours
+          workedTime: monthlyWorkedTime,
+          overtime: monthlyOvertime,
+          breakTime: monthlyBreakTime / 60,
+          lateTime: monthlyLateCount,
+          totalLeaves: totalLeavesDays
+        },
+        attendanceList: monthlyAttendance,
+        leaveList: leaves,
+        notes: notes
+      });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching dashboard stats:", err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.post("/api/employee/notes", async (req, res) => {
+    let connection;
+    try {
+      const { employee_id, title, content, date } = req.body;
+      connection = await db.getConnection();
+      await connection.query(
+        "INSERT INTO notes (employee_id, title, content, date) VALUES (?, ?, ?, ?)",
+        [employee_id, title, content, date || new Date().toISOString().split('T')[0]]
+      );
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.post("/api/employee/leaves", async (req, res) => {
+    let connection;
+    try {
+      const { company_id, employee_id, leave_type, start_date, end_date, reason, total_days } = req.body;
+      connection = await db.getConnection();
+      await connection.query(
+        "INSERT INTO leaves (company_id, employee_id, leave_type, start_date, end_date, reason, total_days) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [company_id, employee_id, leave_type, start_date, end_date, reason, total_days]
+      );
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
       res.status(500).json({ error: err.message });
     } finally {
       if (connection) connection.release();

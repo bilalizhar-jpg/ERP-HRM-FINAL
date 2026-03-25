@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MapPin, Camera, Clock, Coffee, LogOut, CheckCircle, Activity, ShieldCheck, ChevronRight, User, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,6 +17,7 @@ interface AttendanceRecord {
 }
 
 export default function EmployeeAttendance() {
+  const navigate = useNavigate();
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [stats, setStats] = useState({ dailyHours: 0, weeklyHours: 0, monthlyHours: 0 });
   const [status, setStatus] = useState('Checked-Out');
@@ -26,6 +28,12 @@ export default function EmployeeAttendance() {
   const [location, setLocation] = useState<{ lat: number | null, lng: number | null }>({ lat: null, lng: null });
   const videoRef = useRef<HTMLVideoElement>(null);
   const employee = JSON.parse(localStorage.getItem('employee') || '{}');
+
+  useEffect(() => {
+    if (!employee.id) {
+      navigate('/employee/login');
+    }
+  }, [employee.id, navigate]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -85,8 +93,13 @@ export default function EmployeeAttendance() {
   };
 
   const handleAction = async (action: string) => {
+    if (!employee.id || !employee.company_id) {
+      alert("Employee session invalid. Please log in again.");
+      navigate('/employee/login');
+      return;
+    }
     setLoading(true);
-    console.log(`[Attendance] Initiating ${action}...`);
+    console.log(`[Attendance] Initiating ${action} for employee ${employee.id} in company ${employee.company_id}...`);
     
     // Get fresh location for each action
     navigator.geolocation.getCurrentPosition(async (position) => {
