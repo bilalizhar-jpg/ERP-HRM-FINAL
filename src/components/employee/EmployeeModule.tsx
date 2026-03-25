@@ -24,6 +24,8 @@ interface Employee {
   bank_account_no: string;
   mode_of_payment: string;
   username: string;
+  profile_picture?: string;
+  custom_fields?: { label: string; value: string }[];
   created_at: string;
 }
 
@@ -36,6 +38,7 @@ interface Designation {
   id: number;
   name: string;
   department_id: number;
+  department_name?: string;
 }
 
 interface EmployeeModuleProps {
@@ -91,7 +94,9 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
     bank_name: '',
     bank_account_no: '',
     mode_of_payment: '',
-    username: ''
+    username: '',
+    profile_picture: '',
+    custom_fields: [] as { label: string; value: string }[]
   });
 
   const fetchEmployees = useCallback(async () => {
@@ -100,7 +105,11 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
       const res = await fetch(`/api/employees?company_id=${companyId}`);
       if (res.ok) {
         const data = await res.json();
-        setEmployees(data);
+        const parsedData = data.map((emp: any) => ({
+          ...emp,
+          custom_fields: typeof emp.custom_fields === 'string' ? JSON.parse(emp.custom_fields) : (emp.custom_fields || [])
+        }));
+        setEmployees(parsedData);
       }
     } catch (error) {
       console.error("Error fetching employees:", error);
@@ -134,7 +143,12 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => {
+      if (name === 'department') {
+        return { ...prev, [name]: value, designation: '' };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -219,7 +233,9 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
       bank_name: emp.bank_name || '',
       bank_account_no: emp.bank_account_no || '',
       mode_of_payment: emp.mode_of_payment || '',
-      username: emp.username || ''
+      username: emp.username || '',
+      profile_picture: emp.profile_picture || '',
+      custom_fields: emp.custom_fields || []
     });
     setEditingId(emp.id);
     setShowForm(true);
@@ -272,14 +288,64 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
       bank_name: '',
       bank_account_no: '',
       mode_of_payment: '',
-      username: ''
+      username: '',
+      profile_picture: '',
+      custom_fields: []
     });
     setEditingId(null);
   };
 
+  const generateRandomString = (length: number) => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
   const openNewForm = () => {
     resetForm();
+    setFormData(prev => ({
+      ...prev,
+      username: `user_${generateRandomString(6)}`,
+      password: generateRandomString(10)
+    }));
     setShowForm(true);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, profile_picture: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const addCustomField = () => {
+    setFormData(prev => ({
+      ...prev,
+      custom_fields: [...prev.custom_fields, { label: '', value: '' }]
+    }));
+  };
+
+  const updateCustomField = (index: number, field: 'label' | 'value', value: string) => {
+    setFormData(prev => {
+      const newFields = [...prev.custom_fields];
+      newFields[index][field] = value;
+      return { ...prev, custom_fields: newFields };
+    });
+  };
+
+  const removeCustomField = (index: number) => {
+    setFormData(prev => {
+      const newFields = [...prev.custom_fields];
+      newFields.splice(index, 1);
+      return { ...prev, custom_fields: newFields };
+    });
   };
 
   // Filter and paginate data
@@ -592,6 +658,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">SL</th>
+                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">PROFILE</th>
                 <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">EMPLOYEE ID</th>
                 <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">NAME OF EMPLOYEE</th>
                 <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">EMAIL</th>
@@ -606,7 +673,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center">
+                  <td colSpan={11} className="py-8 text-center">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
                     </div>
@@ -614,12 +681,21 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
                 </tr>
               ) : paginatedEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-slate-500">No data available in table</td>
+                  <td colSpan={11} className="py-8 text-center text-slate-500">No data available in table</td>
                 </tr>
               ) : (
                 paginatedEmployees.map((emp, index) => (
                   <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                     <td className="py-3 px-4 text-sm text-slate-600">{(currentPage - 1) * entriesPerPage + index + 1}</td>
+                    <td className="py-3 px-4">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center">
+                        {emp.profile_picture ? (
+                          <img src={emp.profile_picture} alt={emp.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <User size={16} className="text-slate-400" />
+                        )}
+                      </div>
+                    </td>
                     <td className="py-3 px-4 text-sm font-medium text-slate-900">{emp.employee_id || '-'}</td>
                     <td className="py-3 px-4 text-sm font-bold text-emerald-600">{emp.name}</td>
                     <td className="py-3 px-4 text-sm text-slate-600">{emp.email}</td>
@@ -718,8 +794,16 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
             <form onSubmit={handleSubmit} className="p-6">
               {/* Profile Picture */}
               <div className="flex items-center gap-4 mb-8">
-                <div className="w-20 h-20 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400">
-                  <User size={32} />
+                <div className="relative w-20 h-20 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 overflow-hidden group">
+                  {formData.profile_picture ? (
+                    <img src={formData.profile_picture} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <User size={32} />
+                  )}
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Upload size={20} className="text-white" />
+                  </div>
+                  <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-1">Profile Picture</h3>
@@ -749,7 +833,9 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Designation</label>
                   <select name="designation" value={formData.designation} onChange={handleFormChange} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm focus:ring-2 focus:ring-emerald-400 outline-none">
                     <option value="">Enter or select designation</option>
-                    {designations.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    {designations
+                      .filter(d => !formData.department || d.department_name === formData.department)
+                      .map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                   </select>
                 </div>
                 <div>
@@ -861,13 +947,48 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
                   <h3 className="inline-flex items-center gap-2 bg-blue-600 text-white text-xs font-bold uppercase tracking-wider px-3 py-1 rounded">
                     <Settings size={14} /> Custom Fields
                   </h3>
-                  <button type="button" className="text-blue-600 hover:text-blue-700 text-sm font-bold flex items-center gap-1">
+                  <button type="button" onClick={addCustomField} className="text-blue-600 hover:text-blue-700 text-sm font-bold flex items-center gap-1">
                     <Plus size={16} /> Add Custom Field
                   </button>
                 </div>
-                <div className="text-center py-8">
-                  <span className="inline-block bg-blue-600 text-white text-xs font-bold italic px-3 py-1 rounded">No custom fields added yet.</span>
-                </div>
+                
+                {formData.custom_fields.length === 0 ? (
+                  <div className="text-center py-8">
+                    <span className="inline-block bg-slate-100 text-slate-500 text-xs font-bold italic px-3 py-1 rounded">No custom fields added yet.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {formData.custom_fields.map((field, index) => (
+                      <div key={index} className="flex gap-4 items-start">
+                        <div className="flex-1">
+                          <input 
+                            type="text" 
+                            placeholder="Field Label (e.g. LinkedIn Profile)" 
+                            value={field.label}
+                            onChange={(e) => updateCustomField(index, 'label', e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm focus:ring-2 focus:ring-emerald-400 outline-none mb-2" 
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <input 
+                            type="text" 
+                            placeholder="Field Value" 
+                            value={field.value}
+                            onChange={(e) => updateCustomField(index, 'value', e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm focus:ring-2 focus:ring-emerald-400 outline-none" 
+                          />
+                        </div>
+                        <button 
+                          type="button" 
+                          onClick={() => removeCustomField(index)}
+                          className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="pt-6 flex gap-3 justify-end border-t border-slate-100">

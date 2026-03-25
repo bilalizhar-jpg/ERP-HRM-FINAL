@@ -194,6 +194,45 @@ async function startServer() {
       )
     `);
 
+    // Create dashboard_widgets table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS dashboard_widgets (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        widget_id VARCHAR(50) NOT NULL,
+        is_enabled BOOLEAN DEFAULT TRUE,
+        position INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_company_widget (company_id, widget_id)
+      )
+    `);
+
+    // Create modules table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS modules (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        status ENUM('active', 'inactive') DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create company_modules table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS company_modules (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        module_id INT NOT NULL,
+        is_enabled BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_company_module (company_id, module_id)
+      )
+    `);
+
     // Create departments table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS departments (
@@ -295,6 +334,12 @@ async function startServer() {
     try {
       await connection.query("ALTER TABLE employees ADD COLUMN username VARCHAR(100)");
     } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN profile_picture LONGTEXT");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN custom_fields JSON");
+    } catch { /* Ignore if column exists */ }
 
     // Create employer_permissions table
     await connection.query(`
@@ -354,7 +399,7 @@ async function startServer() {
     try {
       const { company_id } = req.query;
       const connection = await db.getConnection();
-      let query = "SELECT id, name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, created_at FROM employees";
+      let query = "SELECT id, name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields, created_at FROM employees";
       const params: (string | number)[] = [];
       
       if (company_id) {
@@ -376,15 +421,15 @@ async function startServer() {
 
   app.post("/api/employees", async (req, res) => {
     try {
-      const { company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username } = req.body;
+      const { company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields } = req.body;
       const connection = await db.getConnection();
       
       // Hash password
       const hashedPassword = await bcrypt.hash(password || '123456', 10);
       
       const [result] = await connection.query(
-        "INSERT INTO employees (company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [company_id, name, email, hashedPassword, employee_id, department, designation, status || 'active', mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username]
+        "INSERT INTO employees (company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [company_id, name, email, hashedPassword, employee_id, department, designation, status || 'active', mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields ? JSON.stringify(custom_fields) : null]
       );
       
       connection.release();
@@ -399,12 +444,12 @@ async function startServer() {
   app.put("/api/employees/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username } = req.body;
+      const { name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields } = req.body;
       const connection = await db.getConnection();
       
       await connection.query(
-        "UPDATE employees SET name = ?, email = ?, employee_id = ?, department = ?, designation = ?, status = ?, mobile_no = ?, date_of_birth = ?, joining_date = ?, blood_group = ?, location = ?, city = ?, employee_type = ?, national_id = ?, salary = ?, tax_deduction = ?, bank_name = ?, bank_account_no = ?, mode_of_payment = ?, username = ? WHERE id = ?",
-        [name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, id]
+        "UPDATE employees SET name = ?, email = ?, employee_id = ?, department = ?, designation = ?, status = ?, mobile_no = ?, date_of_birth = ?, joining_date = ?, blood_group = ?, location = ?, city = ?, employee_type = ?, national_id = ?, salary = ?, tax_deduction = ?, bank_name = ?, bank_account_no = ?, mode_of_payment = ?, username = ?, profile_picture = ?, custom_fields = ? WHERE id = ?",
+        [name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields ? JSON.stringify(custom_fields) : null, id]
       );
       
       connection.release();
@@ -582,6 +627,114 @@ async function startServer() {
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error deleting designation:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Dashboard Widgets API
+  app.get("/api/dashboard-widgets", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      if (!company_id) {
+        return res.status(400).json({ error: "company_id is required" });
+      }
+      
+      const connection = await db.getConnection();
+      const [rows] = await connection.query("SELECT * FROM dashboard_widgets WHERE company_id = ? ORDER BY position ASC", [company_id]);
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching dashboard widgets:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/dashboard-widgets", async (req, res) => {
+    try {
+      const { company_id, widgets } = req.body; // widgets: [{widget_id, is_enabled, position}, ...]
+      const connection = await db.getConnection();
+      
+      for (const widget of widgets) {
+        await connection.query(`
+          INSERT INTO dashboard_widgets (company_id, widget_id, is_enabled, position)
+          VALUES (?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE is_enabled = ?, position = ?
+        `, [company_id, widget.widget_id, widget.is_enabled, widget.position, widget.is_enabled, widget.position]);
+      }
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error updating dashboard widgets:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Modules API
+  app.get("/api/modules", async (req, res) => {
+    try {
+      const connection = await db.getConnection();
+      const [rows] = await connection.query("SELECT * FROM modules");
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching modules:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/modules", async (req, res) => {
+    try {
+      const { name, description, status } = req.body;
+      const connection = await db.getConnection();
+      const [result] = await connection.query(
+        "INSERT INTO modules (name, description, status) VALUES (?, ?, ?)",
+        [name, description, status || 'active']
+      );
+      connection.release();
+      res.json({ success: true, id: (result as { insertId: number }).insertId });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error creating module:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/company-modules", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      const connection = await db.getConnection();
+      const query = company_id 
+        ? "SELECT m.*, cm.is_enabled FROM modules m LEFT JOIN company_modules cm ON m.id = cm.module_id AND cm.company_id = ?"
+        : "SELECT * FROM modules";
+      const params = company_id ? [company_id] : [];
+      const [rows] = await connection.query(query, params);
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching company modules:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/company-modules", async (req, res) => {
+    try {
+      const { company_id, module_id, is_enabled } = req.body;
+      const connection = await db.getConnection();
+      await connection.query(`
+        INSERT INTO company_modules (company_id, module_id, is_enabled)
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE is_enabled = ?
+      `, [company_id, module_id, is_enabled, is_enabled]);
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error updating company module:", err);
       res.status(500).json({ error: err.message });
     }
   });
