@@ -28,6 +28,7 @@ import TimeTrack from './pages/employer/TimeTrack';
 import Attendance from './pages/employer/Attendance';
 import Department from './pages/employer/Department';
 import Designation from './pages/employer/Designation';
+import Employee from './pages/employer/Employee';
 import Leave from './pages/employer/Leave';
 import Payroll from './pages/employer/Payroll';
 import Shifts from './pages/employer/Shifts';
@@ -45,6 +46,7 @@ import CompanyAdminLayout from './components/CompanyAdminLayout';
 import CompanyAdminAttendance from './pages/CompanyAdminAttendance';
 import CompanyAdminDepartment from './pages/CompanyAdminDepartment';
 import CompanyAdminDesignation from './pages/CompanyAdminDesignation';
+import CompanyAdminEmployee from './pages/CompanyAdminEmployee';
 import EmployeeLogin from './pages/EmployeeLogin';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 
@@ -89,6 +91,7 @@ function App() {
         <Route path="/super-admin/employer/time-track" element={<TimeTrack />} />
         <Route path="/super-admin/employer/department" element={<Department />} />
         <Route path="/super-admin/employer/designation" element={<Designation />} />
+        <Route path="/super-admin/employer/employee" element={<Employee />} />
         <Route path="/super-admin/employer/attendance" element={<Attendance />} />
         <Route path="/super-admin/employer/leaves" element={<Leave />} />
         <Route path="/super-admin/employer/payroll" element={<Payroll />} />
@@ -106,6 +109,7 @@ function App() {
           <Route path="attendance" element={<CompanyAdminAttendance />} />
           <Route path="department" element={<CompanyAdminDepartment />} />
           <Route path="designation" element={<CompanyAdminDesignation />} />
+          <Route path="employee" element={<CompanyAdminEmployee />} />
           {/* Add more routes here as needed */}
         </Route>
         <Route path="/employee" element={<EmployeeLogin />} />

@@ -1,4 +1,5 @@
 import express from "express";
+import bcrypt from 'bcryptjs';
 import path from "path";
 import { fileURLToPath } from "url";
 import nodemailer from "nodemailer";
@@ -232,10 +233,68 @@ async function startServer() {
         department VARCHAR(100),
         designation VARCHAR(100),
         status ENUM('active', 'inactive') DEFAULT 'active',
+        mobile_no VARCHAR(50),
+        date_of_birth DATE,
+        joining_date DATE,
+        blood_group VARCHAR(10),
+        location VARCHAR(255),
+        city VARCHAR(100),
+        employee_type VARCHAR(100),
+        national_id VARCHAR(100),
+        salary DECIMAL(10, 2),
+        tax_deduction DECIMAL(5, 2),
+        bank_name VARCHAR(255),
+        bank_account_no VARCHAR(100),
+        mode_of_payment VARCHAR(50),
+        username VARCHAR(100),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
       )
     `);
+
+    // Ensure new columns exist in employees table (in case table was created before)
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN mobile_no VARCHAR(50)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN date_of_birth DATE");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN joining_date DATE");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN blood_group VARCHAR(10)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN location VARCHAR(255)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN city VARCHAR(100)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN employee_type VARCHAR(100)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN national_id VARCHAR(100)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN salary DECIMAL(10, 2)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN tax_deduction DECIMAL(5, 2)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN bank_name VARCHAR(255)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN bank_account_no VARCHAR(100)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN mode_of_payment VARCHAR(50)");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN username VARCHAR(100)");
+    } catch { /* Ignore if column exists */ }
 
     // Create employer_permissions table
     await connection.query(`
@@ -295,7 +354,7 @@ async function startServer() {
     try {
       const { company_id } = req.query;
       const connection = await db.getConnection();
-      let query = "SELECT id, name, employee_id, department, designation FROM employees";
+      let query = "SELECT id, name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, created_at FROM employees";
       const params: (string | number)[] = [];
       
       if (company_id) {
@@ -303,12 +362,72 @@ async function startServer() {
         params.push(company_id as string);
       }
       
+      query += " ORDER BY created_at DESC";
+      
       const [rows] = await connection.query(query, params);
       connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching employees:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/employees", async (req, res) => {
+    try {
+      const { company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username } = req.body;
+      const connection = await db.getConnection();
+      
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password || '123456', 10);
+      
+      const [result] = await connection.query(
+        "INSERT INTO employees (company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [company_id, name, email, hashedPassword, employee_id, department, designation, status || 'active', mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username]
+      );
+      
+      connection.release();
+      res.json({ success: true, id: (result as { insertId: number }).insertId });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error creating employee:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/employees/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username } = req.body;
+      const connection = await db.getConnection();
+      
+      await connection.query(
+        "UPDATE employees SET name = ?, email = ?, employee_id = ?, department = ?, designation = ?, status = ?, mobile_no = ?, date_of_birth = ?, joining_date = ?, blood_group = ?, location = ?, city = ?, employee_type = ?, national_id = ?, salary = ?, tax_deduction = ?, bank_name = ?, bank_account_no = ?, mode_of_payment = ?, username = ? WHERE id = ?",
+        [name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, id]
+      );
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error updating employee:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/employees/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const connection = await db.getConnection();
+      
+      await connection.query("DELETE FROM employees WHERE id = ?", [id]);
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error deleting employee:", err);
       res.status(500).json({ error: err.message });
     }
   });
