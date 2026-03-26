@@ -312,8 +312,11 @@ async function startServer() {
         bank_account_no VARCHAR(100),
         mode_of_payment VARCHAR(50),
         username VARCHAR(100),
+        manager_id INT,
+        profile_picture LONGTEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (manager_id) REFERENCES employees(id) ON DELETE SET NULL
       )
     `);
 
@@ -379,6 +382,16 @@ async function startServer() {
       )
     `);
 
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN manager_id INT");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN profile_picture LONGTEXT");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD CONSTRAINT fk_manager FOREIGN KEY (manager_id) REFERENCES employees(id) ON DELETE SET NULL");
+    } catch { /* Ignore if constraint exists */ }
+    
     // Create attendance table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS attendance (
@@ -1252,6 +1265,74 @@ async function startServer() {
       res.status(500).json({ error: err.message });
     } finally {
       if (connection) connection.release();
+    }
+  });
+
+  interface Employee {
+    id: number;
+    name: string;
+    email: string;
+    employee_id: string;
+    department: string;
+    designation: string;
+    manager_id: number | null;
+    profile_picture: string | null;
+    children?: Employee[];
+  }
+
+  app.get("/api/employees/hierarchy/:company_id", async (req, res) => {
+    try {
+      const { company_id } = req.params;
+      const connection = await db.getConnection();
+      
+      const [employees] = await connection.query(
+        "SELECT id, name, email, employee_id, department, designation, manager_id, profile_picture FROM employees WHERE company_id = ? AND status = 'active'",
+        [company_id]
+      ) as [Employee[], unknown];
+      
+      connection.release();
+      
+      // Build tree structure
+      const employeeMap = new Map<number, Employee>();
+      employees.forEach(emp => {
+        employeeMap.set(emp.id, { ...emp, children: [] });
+      });
+      
+      const rootNodes: Employee[] = [];
+      employees.forEach(emp => {
+        const node = employeeMap.get(emp.id);
+        if (node && emp.manager_id && employeeMap.has(emp.manager_id)) {
+          employeeMap.get(emp.manager_id)!.children!.push(node);
+        } else if (node) {
+          rootNodes.push(node);
+        }
+      });
+      
+      res.json(rootNodes);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching employee hierarchy:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/employees/:id/manager", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { manager_id } = req.body;
+      const connection = await db.getConnection();
+      
+      await connection.query(
+        "UPDATE employees SET manager_id = ? WHERE id = ?",
+        [manager_id, id]
+      );
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error updating employee manager:", err);
+      res.status(500).json({ error: err.message });
     }
   });
 

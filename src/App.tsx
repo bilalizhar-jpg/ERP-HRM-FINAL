@@ -39,6 +39,8 @@ import Assets from './pages/employer/Assets';
 import Expenses from './pages/employer/Expenses';
 import Reports from './pages/employer/Reports';
 import Settings from './pages/employer/Settings';
+import OrgChart from './pages/employer/OrgChart';
+import CompanyPolicy from './pages/employer/CompanyPolicy';
 import EmployerPermissions from './pages/EmployerPermissions';
 import CompanyAdminLogin from './pages/CompanyAdminLogin';
 import CompanyAdminDashboard from './pages/CompanyAdminDashboard';
@@ -92,6 +94,8 @@ function App() {
         <Route path="/super-admin/permissions" element={<EmployerPermissions />} />
         <Route path="/super-admin/employer/dashboard" element={<EmployerDashboard />} />
         <Route path="/super-admin/employer/time-track" element={<TimeTrack />} />
+        <Route path="/super-admin/employer/org-chart/chart" element={<OrgChart />} />
+        <Route path="/super-admin/employer/org-chart/policy" element={<CompanyPolicy />} />
         <Route path="/super-admin/employer/department" element={<Department />} />
         <Route path="/super-admin/employer/designation" element={<Designation />} />
         <Route path="/super-admin/employer/employee" element={<Employee />} />
@@ -114,6 +118,8 @@ function App() {
           <Route path="designation" element={<CompanyAdminDesignation />} />
           <Route path="employee" element={<CompanyAdminEmployee />} />
           <Route path="time-track" element={<CompanyAdminTimeTracking />} />
+          <Route path="org-chart/chart" element={<OrgChart />} />
+          <Route path="org-chart/policy" element={<CompanyPolicy />} />
           <Route path="settings/*" element={<Settings />} />
           {/* Add more routes here as needed */}
         </Route>

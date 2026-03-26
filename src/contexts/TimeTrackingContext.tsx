@@ -219,6 +219,24 @@ export const TimeTrackingProvider = ({ children }: { children: ReactNode }) => {
           ignoreElements: (element) => {
             // Ignore elements with sensitive data classes
             return element.classList.contains('sensitive-data');
+          },
+          onclone: (clonedDoc) => {
+            const style = clonedDoc.createElement('style');
+            style.innerHTML = `
+              * {
+                color-scheme: light !important;
+              }
+              :root {
+                --color-blue-600: #2563eb !important;
+                --color-blue-50: #eff6ff !important;
+                --color-slate-900: #0f172a !important;
+                --color-slate-400: #94a3b8 !important;
+                --color-slate-200: #e2e8f0 !important;
+                --color-slate-100: #f1f5f9 !important;
+                --color-slate-50: #f8fafc !important;
+              }
+            `;
+            clonedDoc.head.appendChild(style);
           }
         });
         

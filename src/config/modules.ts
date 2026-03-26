@@ -45,7 +45,16 @@ export interface ModuleItem {
 export const employerModules: ModuleItem[] = [
   { name: 'DASHBOARD', icon: LayoutDashboard, path: '/super-admin/employer/dashboard' },
   { name: 'TIME TRACK', icon: Clock, path: '/super-admin/employer/time-track' },
-  { name: 'ORG CHART', icon: Network, path: '/super-admin/employer/org-chart', hasDropdown: true },
+  { 
+    name: 'ORG CHART', 
+    icon: Network, 
+    path: '/super-admin/employer/org-chart', 
+    hasDropdown: true,
+    subItems: [
+      { name: 'ORGANIZATION CHART', path: '/chart' },
+      { name: 'COMPANY POLICY', path: '/policy' },
+    ]
+  },
   { name: 'ATTENDANCE', icon: CalendarCheck, path: '/super-admin/employer/attendance' },
   { name: 'AWARD', icon: Award, path: '/super-admin/employer/award' },
   { name: 'DEPARTMENT', icon: Building2, path: '/super-admin/employer/department' },

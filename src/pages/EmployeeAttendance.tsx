@@ -28,6 +28,7 @@ export default function EmployeeAttendance() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [location, setLocation] = useState<{ lat: number | null, lng: number | null }>({ lat: null, lng: null });
   const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const employee = JSON.parse(localStorage.getItem('employee') || '{}');
   
   const { isTracking, isPaused, startTracking, pauseTracking, resumeTracking, stopTracking, hasConsent, activeTime, idleTime, keystrokes, mouseClicks, settings } = useTimeTracking();
@@ -80,10 +81,21 @@ export default function EmployeeAttendance() {
     setShowCamera(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      streamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
     } catch (err) {
       console.error("Camera access error", err);
       setShowCamera(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
   };
 
@@ -96,8 +108,7 @@ export default function EmployeeAttendance() {
       canvas.getContext('2d')?.drawImage(video, 0, 0);
       setSelfie(canvas.toDataURL('image/jpeg'));
       setShowCamera(false);
-      const stream = video.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
+      stopCamera();
     }
   };
 
@@ -547,7 +558,7 @@ export default function EmployeeAttendance() {
             >
               <div className="flex justify-between items-center mb-8">
                 <h3 className="font-black uppercase tracking-widest text-lg text-slate-900">Visual Verification</h3>
-                <button onClick={() => setShowCamera(false)} className="p-2.5 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
+                <button onClick={() => { setShowCamera(false); stopCamera(); }} className="p-2.5 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
                   <X size={24} />
                 </button>
               </div>
@@ -568,7 +579,7 @@ export default function EmployeeAttendance() {
                   Capture ID
                 </button>
                 <button 
-                  onClick={() => setShowCamera(false)} 
+                  onClick={() => { setShowCamera(false); stopCamera(); }} 
                   className="px-8 py-5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-sm transition-all active:scale-95"
                 >
                   Cancel

@@ -25,6 +25,7 @@ interface Employee {
   bank_account_no: string;
   mode_of_payment: string;
   username: string;
+  manager_id?: number;
   profile_picture?: string;
   custom_fields?: { label: string; value: string }[];
   created_at: string;
@@ -96,6 +97,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
     bank_account_no: '',
     mode_of_payment: '',
     username: '',
+    manager_id: '' as string | number,
     profile_picture: '',
     custom_fields: [] as { label: string; value: string }[]
   });
@@ -186,6 +188,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
       const payload = {
         ...formData,
         company_id: companyId,
+        manager_id: formData.manager_id || null,
         // Format dates to YYYY-MM-DD if they exist
         date_of_birth: formData.date_of_birth ? new Date(formData.date_of_birth).toISOString().split('T')[0] : null,
         joining_date: formData.joining_date ? new Date(formData.joining_date).toISOString().split('T')[0] : null,
@@ -235,6 +238,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
       bank_account_no: emp.bank_account_no || '',
       mode_of_payment: emp.mode_of_payment || '',
       username: emp.username || '',
+      manager_id: emp.manager_id || '',
       profile_picture: emp.profile_picture || '',
       custom_fields: emp.custom_fields || []
     });
@@ -290,6 +294,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
       bank_account_no: '',
       mode_of_payment: '',
       username: '',
+      manager_id: '',
       profile_picture: '',
       custom_fields: []
     });
@@ -436,6 +441,22 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
   const uniqueBloodGroups = Array.from(new Set(employees.map(e => e.blood_group).filter(Boolean)));
   const uniqueLocations = Array.from(new Set(employees.map(e => e.location).filter(Boolean)));
   const uniqueCities = Array.from(new Set(employees.map(e => e.city).filter(Boolean)));
+
+  const positionsSummary = useMemo(() => {
+    const summary: { [key: string]: { count: number; department: string } } = {};
+    employees.forEach(emp => {
+      if (emp.designation) {
+        if (!summary[emp.designation]) {
+          summary[emp.designation] = { count: 0, department: emp.department };
+        }
+        summary[emp.designation].count++;
+      }
+    });
+    return Object.entries(summary).map(([name, data]) => ({
+      name,
+      ...data
+    }));
+  }, [employees]);
 
   return (
     <div className="space-y-6">
@@ -657,94 +678,125 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">SL</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">PROFILE</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">EMPLOYEE ID</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">NAME OF EMPLOYEE</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">CREDENTIALS</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">EMAIL</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">MOBILE NO</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">DATE OF BIRTH</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">DESIGNATION</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">JOINING DATE</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">STATUS</th>
-                <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap text-right">ACTION</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={12} className="py-8 text-center">
-                    <div className="flex justify-center items-center">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
-                    </div>
-                  </td>
+          {activeTab === 'positions' ? (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">SL</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">DESIGNATION</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">DEPARTMENT</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap text-center">TOTAL EMPLOYEES</th>
                 </tr>
-              ) : paginatedEmployees.length === 0 ? (
-                <tr>
-                  <td colSpan={12} className="py-8 text-center text-slate-500">No data available in table</td>
+              </thead>
+              <tbody>
+                {positionsSummary.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-slate-500">No positions data available</td>
+                  </tr>
+                ) : (
+                  positionsSummary.map((pos, index) => (
+                    <tr key={pos.name} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-4 text-sm text-slate-600">{index + 1}</td>
+                      <td className="py-3 px-4 text-sm font-bold text-emerald-600">{pos.name}</td>
+                      <td className="py-3 px-4 text-sm text-slate-600">{pos.department || '-'}</td>
+                      <td className="py-3 px-4 text-sm font-bold text-slate-900 text-center">
+                        <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full">{pos.count}</span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">SL</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">PROFILE</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">EMPLOYEE ID</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap text-center">NAME OF EMPLOYEE</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">CREDENTIALS</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">EMAIL</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap text-center">MOBILE NO</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap text-center">DATE OF BIRTH</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap text-center">DESIGNATION</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap text-center">JOINING DATE</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap text-center">STATUS</th>
+                  <th className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap text-right">ACTION</th>
                 </tr>
-              ) : (
-                paginatedEmployees.map((emp, index) => (
-                  <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                    <td className="py-3 px-4 text-sm text-slate-600">{(currentPage - 1) * entriesPerPage + index + 1}</td>
-                    <td className="py-3 px-4">
-                      <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center">
-                        {emp.profile_picture ? (
-                          <img src={emp.profile_picture} alt={emp.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <User size={16} className="text-slate-400" />
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-sm font-medium text-slate-900">{emp.employee_id || '-'}</td>
-                    <td className="py-3 px-4 text-sm font-bold text-emerald-600">{emp.name}</td>
-                    <td className="py-3 px-4 text-sm text-slate-600">
-                      <div>User: {emp.username}</div>
-                      <div>Pass: {emp.password}</div>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-slate-600">{emp.email}</td>
-                    <td className="py-3 px-4 text-sm text-slate-600">{emp.mobile_no || '-'}</td>
-                    <td className="py-3 px-4 text-sm text-slate-600">
-                      {emp.date_of_birth ? new Date(emp.date_of_birth).toLocaleDateString() : '-'}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-slate-600">{emp.designation || '-'}</td>
-                    <td className="py-3 px-4 text-sm text-slate-600">
-                      {emp.joining_date ? new Date(emp.joining_date).toLocaleDateString() : '-'}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                        emp.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                      }`}>
-                        {emp.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => handleEdit(emp)}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(emp.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={12} className="py-8 text-center">
+                      <div className="flex justify-center items-center">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : paginatedEmployees.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="py-8 text-center text-slate-500">No data available in table</td>
+                  </tr>
+                ) : (
+                  paginatedEmployees.map((emp, index) => (
+                    <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-4 text-sm text-slate-600">{(currentPage - 1) * entriesPerPage + index + 1}</td>
+                      <td className="py-3 px-4">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center">
+                          {emp.profile_picture ? (
+                            <img src={emp.profile_picture} alt={emp.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <User size={16} className="text-slate-400" />
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm font-medium text-slate-900">{emp.employee_id || '-'}</td>
+                      <td className="py-3 px-4 text-sm font-bold text-emerald-600">{emp.name}</td>
+                      <td className="py-3 px-4 text-sm text-slate-600">
+                        <div>User: {emp.username}</div>
+                        <div>Pass: {emp.password}</div>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-slate-600">{emp.email}</td>
+                      <td className="py-3 px-4 text-sm text-slate-600">{emp.mobile_no || '-'}</td>
+                      <td className="py-3 px-4 text-sm text-slate-600">
+                        {emp.date_of_birth ? new Date(emp.date_of_birth).toLocaleDateString() : '-'}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-slate-600">{emp.designation || '-'}</td>
+                      <td className="py-3 px-4 text-sm text-slate-600">
+                        {emp.joining_date ? new Date(emp.joining_date).toLocaleDateString() : '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                          emp.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                        }`}>
+                          {emp.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => handleEdit(emp)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(emp.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {/* Pagination */}
@@ -893,6 +945,15 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">City</label>
                   <input type="text" name="city" value={formData.city} onChange={handleFormChange} placeholder="City" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm focus:ring-2 focus:ring-emerald-400 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Reports To (Manager)</label>
+                  <select name="manager_id" value={formData.manager_id} onChange={handleFormChange} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-900 text-sm focus:ring-2 focus:ring-emerald-400 outline-none">
+                    <option value="">Select Manager</option>
+                    {employees
+                      .filter(e => e.id !== editingId)
+                      .map(e => <option key={e.id} value={e.id}>{e.name} ({e.designation})</option>)}
+                  </select>
                 </div>
               </div>
 
