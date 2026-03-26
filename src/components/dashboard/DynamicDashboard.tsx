@@ -31,18 +31,18 @@ export interface WidgetConfig {
   icon?: React.ReactNode;
   // Chart specific
   chartType?: 'line' | 'bar' | 'pie' | 'area';
-  data?: any[];
+  data?: Record<string, unknown>[];
   dataKeys?: string[];
   colors?: string[];
   // Table specific
-  columns?: { key: string; label: string; render?: (val: any) => React.ReactNode }[];
+  columns?: { key: string; label: string; render?: (val: unknown) => React.ReactNode }[];
 }
 
 interface DynamicDashboardProps {
   moduleName: string;
   title: string;
   widgets: WidgetConfig[];
-  onFilterChange?: (filters: any) => void;
+  onFilterChange?: (filters: Record<string, unknown>) => void;
   isLoading?: boolean;
 }
 

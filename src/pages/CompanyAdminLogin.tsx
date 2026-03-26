@@ -23,7 +23,7 @@ export default function CompanyAdminLogin() {
       const text = await res.text();
       try {
         data = JSON.parse(text);
-      } catch (e) {
+      } catch {
         throw new Error(text || res.statusText);
       }
 
@@ -34,9 +34,10 @@ export default function CompanyAdminLogin() {
       } else {
         alert(data.message || "Invalid credentials");
       }
-    } catch (error: any) {
-      console.error("Login error:", error);
-      alert(error.message || "Error logging in");
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Login error:", err);
+      alert(err.message || "Error logging in");
     } finally {
       setLoading(false);
     }

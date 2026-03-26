@@ -1302,6 +1302,8 @@ async function startServer() {
       const monthlyOvertime = monthlyAttendance.reduce((acc, curr) => acc + parseFloat(String(curr.overtime_hours || 0)), 0);
       
       const totalLeavesDays = leaves.filter(l => l.status === 'Approved').reduce((acc, curr) => acc + curr.total_days, 0);
+      const leaveBalance = 20 - totalLeavesDays;
+      const salarySlipNotification = now.getDate() >= 25 ? `Your salary slip for ${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()} is ready.` : null;
 
       res.json({
         today: {
@@ -1320,6 +1322,8 @@ async function startServer() {
           lateTime: monthlyLateCount,
           totalLeaves: totalLeavesDays
         },
+        leaveBalance,
+        salarySlipNotification,
         attendanceList: monthlyAttendance,
         leaveList: leaves,
         notes: notes
@@ -1342,6 +1346,40 @@ async function startServer() {
         "INSERT INTO notes (employee_id, title, content, date) VALUES (?, ?, ?, ?)",
         [employee_id, title, content, date || new Date().toISOString().split('T')[0]]
       );
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.put("/api/employee/notes/:id", async (req, res) => {
+    let connection;
+    try {
+      const { id } = req.params;
+      const { title, content } = req.body;
+      connection = await db.getConnection();
+      await connection.query(
+        "UPDATE notes SET title = ?, content = ? WHERE id = ?",
+        [title, content, id]
+      );
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.delete("/api/employee/notes/:id", async (req, res) => {
+    let connection;
+    try {
+      const { id } = req.params;
+      connection = await db.getConnection();
+      await connection.query("DELETE FROM notes WHERE id = ?", [id]);
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;

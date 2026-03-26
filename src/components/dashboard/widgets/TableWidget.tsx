@@ -4,14 +4,14 @@ import { WidgetContainer } from '../WidgetContainer';
 interface Column {
   key: string;
   label: string;
-  render?: (value: any, row: any) => React.ReactNode;
+  render?: (value: unknown, row: Record<string, unknown>) => React.ReactNode;
 }
 
 interface TableWidgetProps {
   id: string;
   title: string;
   columns: Column[];
-  data: any[];
+  data: Record<string, unknown>[];
   size?: 'small' | 'medium' | 'large' | 'full';
 }
 
@@ -40,7 +40,7 @@ export const TableWidget: React.FC<TableWidgetProps> = ({
               <tr key={rowIndex} className="bg-white border-b hover:bg-gray-50">
                 {columns.map((col) => (
                   <td key={`${rowIndex}-${col.key}`} className="px-6 py-4">
-                    {col.render ? col.render(row[col.key], row) : row[col.key]}
+                    {col.render ? col.render(row[col.key], row) : (row[col.key] as React.ReactNode)}
                   </td>
                 ))}
               </tr>

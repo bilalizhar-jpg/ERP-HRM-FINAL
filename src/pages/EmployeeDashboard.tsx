@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Clock, Calendar, Coffee, LogIn, LogOut, 
+  Clock, Calendar, Coffee, FileText, 
   AlertCircle, Plus, 
   ChevronLeft, ChevronRight, StickyNote,
   CalendarDays, History, ClipboardList,
-  Activity, Play, Pause, Square, Monitor, Keyboard
+  Activity, Pause, Square, Monitor, Keyboard,
+  Edit2, Trash2
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, differenceInDays } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -55,6 +56,8 @@ interface DashboardStats {
     lateTime: number;
     totalLeaves: number;
   };
+  leaveBalance: number;
+  salarySlipNotification: string | null;
   attendanceList: AttendanceRecord[];
   leaveList: LeaveRecord[];
   notes: NoteRecord[];
@@ -66,6 +69,7 @@ export default function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showNoteModal, setShowNoteModal] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [newNote, setNewNote] = useState({ title: '', content: '' });
@@ -85,10 +89,7 @@ export default function EmployeeDashboard() {
     settings, 
     hasConsent, 
     setHasConsent,
-    startTracking,
-    pauseTracking,
-    resumeTracking,
-    stopTracking
+    startTracking
   } = useTimeTracking();
 
   const fetchDashboardData = useCallback(async () => {
@@ -140,8 +141,11 @@ export default function EmployeeDashboard() {
   const handleAddNote = async () => {
     if (!newNote.title || !newNote.content) return;
     try {
-      const res = await fetch('/api/employee/notes', {
-        method: 'POST',
+      const url = editingNoteId ? `/api/employee/notes/${editingNoteId}` : '/api/employee/notes';
+      const method = editingNoteId ? 'PUT' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           employee_id: employee.id,
@@ -152,12 +156,33 @@ export default function EmployeeDashboard() {
       });
       if (res.ok) {
         setShowNoteModal(false);
+        setEditingNoteId(null);
         setNewNote({ title: '', content: '' });
         fetchDashboardData();
       }
     } catch (error) {
-      console.error("Error adding note:", error);
+      console.error("Error saving note:", error);
     }
+  };
+
+  const handleDeleteNote = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this note?')) return;
+    try {
+      const res = await fetch(`/api/employee/notes/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        fetchDashboardData();
+      }
+    } catch (error) {
+      console.error("Error deleting note:", error);
+    }
+  };
+
+  const handleEditNote = (note: NoteRecord) => {
+    setEditingNoteId(note.id);
+    setNewNote({ title: note.title, content: note.content });
+    setShowNoteModal(true);
   };
 
   const handleApplyLeave = async () => {
@@ -235,27 +260,27 @@ export default function EmployeeDashboard() {
         </div>
       </div>
 
-      {/* Top Punch Info Bar */}
+      {/* Top Punch Info Bar - Replaced with Leave Balance and Salary Notification */}
       <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-wrap items-center gap-12">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <LogIn size={24} />
+            <Calendar size={24} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Punch in time</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Leave balance</p>
             <p className="text-xl font-black text-slate-900">
-              {stats?.today.punchIn ? format(new Date(stats.today.punchIn), 'h:mm a') : '--:--'}
+              {stats?.leaveBalance ?? '--'} Days
             </p>
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600">
-            <LogOut size={24} />
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+            <FileText size={24} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Punch out time</p>
-            <p className="text-xl font-black text-slate-900">
-              {stats?.today.punchOut ? format(new Date(stats.today.punchOut), 'h:mm a') : '--:--'}
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salary slip notification</p>
+            <p className="text-sm font-bold text-slate-700 max-w-xs truncate">
+              {stats?.salarySlipNotification ?? 'No new notifications'}
             </p>
           </div>
         </div>
@@ -294,43 +319,6 @@ export default function EmployeeDashboard() {
                   <Monitor size={12} />
                   Screenshots: <span className="text-blue-600">On</span>
                 </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 ml-4">
-              {!isTracking ? (
-                <button 
-                  onClick={startTracking}
-                  className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors"
-                  title="Start Tracking"
-                >
-                  <Play size={18} className="fill-current" />
-                </button>
-              ) : isPaused ? (
-                <button 
-                  onClick={resumeTracking}
-                  className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors"
-                  title="Resume Tracking"
-                >
-                  <Play size={18} className="fill-current" />
-                </button>
-              ) : (
-                <button 
-                  onClick={pauseTracking}
-                  className="p-3 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 transition-colors"
-                  title="Pause Tracking"
-                >
-                  <Pause size={18} className="fill-current" />
-                </button>
-              )}
-              {isTracking && (
-                <button 
-                  onClick={stopTracking}
-                  className="p-3 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
-                  title="Stop Tracking"
-                >
-                  <Square size={18} className="fill-current" />
-                </button>
               )}
             </div>
           </div>
@@ -553,7 +541,11 @@ export default function EmployeeDashboard() {
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">My Notes</h2>
             <button 
-              onClick={() => setShowNoteModal(true)}
+              onClick={() => {
+                setEditingNoteId(null);
+                setNewNote({ title: '', content: '' });
+                setShowNoteModal(true);
+              }}
               className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-all shadow-lg shadow-blue-100"
             >
               <Plus size={20} />
@@ -567,12 +559,27 @@ export default function EmployeeDashboard() {
               </div>
             ) : (
               stats?.notes.map(note => (
-                <div key={note.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-blue-200 transition-all group">
+                <div key={note.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-blue-200 transition-all group relative">
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">{note.title}</h4>
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight pr-12">{note.title}</h4>
                     <span className="text-[10px] font-bold text-slate-400">{format(new Date(note.date), 'MMM d')}</span>
                   </div>
                   <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{note.content}</p>
+                  
+                  <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => handleEditNote(note)}
+                      className="p-1.5 rounded-lg bg-white text-blue-600 shadow-sm hover:bg-blue-50 transition-colors"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteNote(note.id)}
+                      className="p-1.5 rounded-lg bg-white text-rose-600 shadow-sm hover:bg-rose-50 transition-colors"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -598,8 +605,16 @@ export default function EmployeeDashboard() {
               className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
             >
               <div className="p-8 border-b border-slate-50 flex items-center justify-between">
-                <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Add New Note</h3>
-                <button onClick={() => setShowNoteModal(false)} className="text-slate-400 hover:text-slate-600">
+                <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+                  {editingNoteId ? 'Edit Note' : 'Add New Note'}
+                </h3>
+                <button 
+                  onClick={() => {
+                    setShowNoteModal(false);
+                    setEditingNoteId(null);
+                  }} 
+                  className="text-slate-400 hover:text-slate-600"
+                >
                   <Plus size={24} className="rotate-45" />
                 </button>
               </div>
@@ -767,7 +782,7 @@ export default function EmployeeDashboard() {
                   </ul>
                   <div className="bg-blue-50 p-4 rounded-2xl mt-6 border border-blue-100">
                     <p className="text-blue-800 text-xs leading-relaxed">
-                      <strong>Privacy Note:</strong> Tracking only occurs when you are punched in and the tracker is active. You can pause tracking manually during breaks.
+                      <strong>Privacy Note:</strong> Tracking only occurs when you are checked in and the tracker is active. Tracking is automatically managed based on your attendance actions.
                     </p>
                   </div>
                 </div>

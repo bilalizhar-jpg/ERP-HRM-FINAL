@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Camera, Clock, Coffee, LogOut, CheckCircle, Activity, ShieldCheck, ChevronRight, User, X } from 'lucide-react';
+import { MapPin, Camera, Clock, Coffee, LogOut, CheckCircle, Activity, ShieldCheck, ChevronRight, User, X, Keyboard, MousePointer2, Pause, Square } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTimeTracking } from '../contexts/TimeTrackingContext';
@@ -30,7 +30,13 @@ export default function EmployeeAttendance() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const employee = JSON.parse(localStorage.getItem('employee') || '{}');
   
-  const { startTracking, pauseTracking, resumeTracking, stopTracking, hasConsent } = useTimeTracking();
+  const { isTracking, isPaused, startTracking, pauseTracking, resumeTracking, stopTracking, hasConsent, activeTime, idleTime, keystrokes, mouseClicks, settings } = useTimeTracking();
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h}h ${m}m`;
+  };
 
   useEffect(() => {
     if (!employee.id) {
@@ -192,6 +198,77 @@ export default function EmployeeAttendance() {
           <button className="px-5 py-2.5 text-slate-500 text-xs font-black uppercase tracking-wider hover:bg-white/50 rounded-xl transition-all">Monthly</button>
         </div>
       </header>
+
+      {/* Time Tracking Bar */}
+      {settings?.is_enabled && hasConsent && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Time Tracking</h2>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Monitor Employee Activity and Productivity</p>
+            </div>
+            <div className="flex gap-2">
+              <div className={`px-4 py-2 rounded-xl border text-sm font-bold flex items-center gap-2 ${
+                isTracking && !isPaused ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 
+                isPaused ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-500'
+              }`}>
+                {isTracking && !isPaused ? <Activity size={14} className="animate-pulse" /> : 
+                 isPaused ? <Pause size={14} /> : <Square size={14} />}
+                {isTracking && !isPaused ? 'Tracking Active' : isPaused ? 'Tracking Paused' : 'Tracking Stopped'}
+              </div>
+              <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 flex items-center gap-2">
+                {employee.name} ({employee.employee_id})
+              </div>
+              <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 flex items-center gap-2">
+                {format(currentTime, 'MM/dd/yyyy')}
+                <Clock size={14} className="text-slate-400" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-500">
+              <Activity size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Active Time</p>
+              <p className="text-2xl font-black text-slate-900">{formatTime(activeTime)}</p>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-500">
+              <Coffee size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Idle Time</p>
+              <p className="text-2xl font-black text-slate-900">{formatTime(idleTime)}</p>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-500">
+              <Keyboard size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Keystrokes</p>
+              <p className="text-2xl font-black text-slate-900">{keystrokes}</p>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center text-purple-500">
+              <MousePointer2 size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Mouse Clicks</p>
+              <p className="text-2xl font-black text-slate-900">{mouseClicks}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Content Area */}

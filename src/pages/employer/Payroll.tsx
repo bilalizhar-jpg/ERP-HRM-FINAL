@@ -79,13 +79,13 @@ const payrollWidgets: WidgetConfig[] = [
       { 
         key: 'status', 
         label: 'Status',
-        render: (val: string) => (
+        render: (val: unknown) => (
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
             val === 'Paid' ? 'bg-green-100 text-green-800' : 
             val === 'Processing' ? 'bg-blue-100 text-blue-800' : 
             'bg-yellow-100 text-yellow-800'
           }`}>
-            {val}
+            {String(val)}
           </span>
         )
       },

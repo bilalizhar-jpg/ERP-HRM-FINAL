@@ -22,7 +22,7 @@ interface ChartWidgetProps {
   id: string;
   title: string;
   type: 'line' | 'bar' | 'pie' | 'area';
-  data: any[];
+  data: Record<string, unknown>[];
   dataKeys: string[];
   colors?: string[];
   size?: 'small' | 'medium' | 'large' | 'full';

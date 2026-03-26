@@ -13,6 +13,8 @@ interface TimeTrackingContextType {
   isPaused: boolean;
   activeTime: number; // in seconds
   idleTime: number; // in seconds
+  keystrokes: number;
+  mouseClicks: number;
   startTracking: () => void;
   pauseTracking: () => void;
   resumeTracking: () => void;
@@ -32,6 +34,8 @@ export const TimeTrackingProvider = ({ children }: { children: ReactNode }) => {
   
   const [activeTime, setActiveTime] = useState(0);
   const [idleTime, setIdleTime] = useState(0);
+  const [keystrokes, setKeystrokes] = useState(0);
+  const [mouseClicks, setMouseClicks] = useState(0);
 
   // Refs for mutable state inside intervals
   const trackingState = useRef({
@@ -47,17 +51,42 @@ export const TimeTrackingProvider = ({ children }: { children: ReactNode }) => {
   const userStr = localStorage.getItem('employee');
   const user = userStr ? JSON.parse(userStr) : null;
 
-  // Fetch settings on mount
+  // Fetch settings and initial stats on mount
   useEffect(() => {
     if (user?.id && user?.company_id) {
+      // Fetch settings
       fetch(`/api/time-tracking/settings/${user.company_id}/${user.id}`)
         .then(res => res.json())
         .then(data => {
           setSettings(data);
-          // Auto-start if enabled and consent given (or maybe require consent every session)
-          // For now, we wait for explicit start or attendance check-in
         })
         .catch(err => console.error("Failed to load time tracking settings", err));
+
+      // Fetch today's stats
+      const today = new Date().toISOString().split('T')[0];
+      fetch(`/api/time-tracking/logs/${user.company_id}/${user.id}?date=${today}`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            let totalActive = 0;
+            let totalIdle = 0;
+            let totalKeys = 0;
+            let totalClicks = 0;
+            
+            data.forEach((log: { active_minutes?: number; idle_minutes?: number; keystrokes?: number; mouse_clicks?: number }) => {
+              totalActive += (log.active_minutes || 0) * 60;
+              totalIdle += (log.idle_minutes || 0) * 60;
+              totalKeys += (log.keystrokes || 0);
+              totalClicks += (log.mouse_clicks || 0);
+            });
+            
+            setActiveTime(totalActive);
+            setIdleTime(totalIdle);
+            setKeystrokes(totalKeys);
+            setMouseClicks(totalClicks);
+          }
+        })
+        .catch(err => console.error("Failed to load today's time tracking stats", err));
     }
   }, [user?.id, user?.company_id]);
 
@@ -70,8 +99,10 @@ export const TimeTrackingProvider = ({ children }: { children: ReactNode }) => {
       
       if (e.type === 'keydown') {
         trackingState.current.keystrokes += 1;
+        setKeystrokes(prev => prev + 1);
       } else if (e.type === 'mousedown') {
         trackingState.current.mouseClicks += 1;
+        setMouseClicks(prev => prev + 1);
       }
     };
 
@@ -143,6 +174,10 @@ export const TimeTrackingProvider = ({ children }: { children: ReactNode }) => {
           state.idleMinutesToSync = 0;
           state.keystrokes = 0;
           state.mouseClicks = 0;
+          // We don't reset the state variables here because they represent the session total
+          // unless the user wants them to reset every minute, which is unlikely for a dashboard.
+          // Actually, the sync resets the server-side counters. 
+          // The UI should probably show the daily total.
         }).catch(err => console.error("Failed to sync time tracking data", err));
       }
     }, 60000); // Sync every minute
@@ -221,6 +256,8 @@ export const TimeTrackingProvider = ({ children }: { children: ReactNode }) => {
       isPaused,
       activeTime,
       idleTime,
+      keystrokes,
+      mouseClicks,
       startTracking,
       pauseTracking,
       resumeTracking,

@@ -82,13 +82,13 @@ const dashboardWidgets: WidgetConfig[] = [
       { 
         key: 'status', 
         label: 'Status',
-        render: (val: string) => (
+        render: (val: unknown) => (
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
             val === 'Completed' ? 'bg-green-100 text-green-800' : 
             val === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 
             'bg-gray-100 text-gray-800'
           }`}>
-            {val}
+            {String(val)}
           </span>
         )
       },
