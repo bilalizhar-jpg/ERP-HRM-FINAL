@@ -1,11 +1,7 @@
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
-import AttendanceModule from '../../components/attendance/AttendanceModule';
+import ModulePlaceholder from '../../components/ModulePlaceholder';
 
 export default function Attendance() {
-  // In a real app, you would get the company ID from the context or URL
-  // For now, we'll assume company ID 1 for super admin testing
-  const companyId = 1;
-
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex">
       <SuperAdminSidebar />
@@ -16,7 +12,10 @@ export default function Attendance() {
           <p className="text-slate-500 font-medium">Manage employee attendance records.</p>
         </header>
 
-        <AttendanceModule companyId={companyId} />
+        <ModulePlaceholder 
+          title="Attendance" 
+          description="Employee attendance records are managed by employers." 
+        />
       </main>
     </div>
   );

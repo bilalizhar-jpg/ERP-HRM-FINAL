@@ -1,17 +1,21 @@
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
-import EmployeeModule from '../../components/employee/EmployeeModule';
+import ModulePlaceholder from '../../components/ModulePlaceholder';
 
 export default function Employee() {
-  // In a real app, you would get the company ID from the context or URL
-  // For now, we'll assume company ID 1 for super admin testing
-  const companyId = 1;
-
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex">
       <SuperAdminSidebar />
       
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
-        <EmployeeModule companyId={companyId} />
+        <header className="mb-12">
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">Employees</h1>
+          <p className="text-slate-500 font-medium">Manage company employees.</p>
+        </header>
+
+        <ModulePlaceholder 
+          title="Employees" 
+          description="Company employees are managed by employers." 
+        />
       </main>
     </div>
   );
