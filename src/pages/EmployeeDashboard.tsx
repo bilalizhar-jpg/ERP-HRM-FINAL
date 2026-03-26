@@ -5,7 +5,7 @@ import {
   AlertCircle, Plus, 
   ChevronLeft, ChevronRight, StickyNote,
   CalendarDays, History, ClipboardList,
-  Activity, Pause, Square, Monitor, Keyboard,
+  Activity, Pause, Square, Monitor, Keyboard, MousePointer2,
   Edit2, Trash2
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, differenceInDays } from 'date-fns';
@@ -86,6 +86,8 @@ export default function EmployeeDashboard() {
     isPaused, 
     activeTime, 
     idleTime, 
+    keystrokes,
+    mouseClicks,
     settings, 
     hasConsent, 
     setHasConsent,
@@ -313,6 +315,16 @@ export default function EmployeeDashboard() {
               <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
                 <Coffee size={12} />
                 Idle: <span className="font-mono text-slate-700">{formatTime(idleTime)}</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
+                  <Keyboard size={10} />
+                  {keystrokes} Keys
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
+                  <MousePointer2 size={10} />
+                  {mouseClicks} Clicks
+                </div>
               </div>
               {settings.screenshot_enabled && (
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-500">

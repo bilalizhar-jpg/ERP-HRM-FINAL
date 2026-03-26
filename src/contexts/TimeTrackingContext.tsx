@@ -51,7 +51,7 @@ export const TimeTrackingProvider = ({ children }: { children: ReactNode }) => {
   const userStr = localStorage.getItem('employee');
   const user = userStr ? JSON.parse(userStr) : null;
 
-  // Fetch settings and initial stats on mount
+  // Fetch settings, initial stats, and current attendance status on mount
   useEffect(() => {
     if (user?.id && user?.company_id) {
       // Fetch settings
@@ -87,6 +87,27 @@ export const TimeTrackingProvider = ({ children }: { children: ReactNode }) => {
           }
         })
         .catch(err => console.error("Failed to load today's time tracking stats", err));
+
+      // Fetch current attendance status to determine initial tracking state
+      fetch(`/api/employee/attendance/stats?employee_id=${user.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data?.dailyAttendance && data.dailyAttendance.length > 0) {
+            const currentStatus = data.dailyAttendance[0].status;
+            if (currentStatus === 'Present') {
+              setIsTracking(true);
+              setIsPaused(false);
+              trackingState.current.isTracking = true;
+              trackingState.current.isPaused = false;
+            } else if (currentStatus === 'On Break') {
+              setIsTracking(true);
+              setIsPaused(true);
+              trackingState.current.isTracking = true;
+              trackingState.current.isPaused = true;
+            }
+          }
+        })
+        .catch(err => console.error("Failed to load initial attendance status", err));
     }
   }, [user?.id, user?.company_id]);
 
@@ -119,30 +140,28 @@ export const TimeTrackingProvider = ({ children }: { children: ReactNode }) => {
 
   // Main tracking loop (runs every second)
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (!trackingState.current.isTracking || trackingState.current.isPaused) return;
+    let interval: NodeJS.Timeout;
+    
+    if (isTracking && !isPaused) {
+      interval = setInterval(() => {
+        const now = Date.now();
+        const idleThresholdMs = (settings?.idle_threshold || 5) * 60 * 1000;
+        const isIdle = (now - trackingState.current.lastActivityTime) > idleThresholdMs;
 
-      const now = Date.now();
-      const idleThresholdMs = (settings?.idle_threshold || 5) * 60 * 1000;
-      const isIdle = (now - trackingState.current.lastActivityTime) > idleThresholdMs;
-
-      if (isIdle) {
-        setIdleTime(prev => prev + 1);
-        // Every 60 seconds of idle time, queue 1 minute for sync
-        if ((idleTime + 1) % 60 === 0) {
-          trackingState.current.idleMinutesToSync += 1;
+        if (isIdle) {
+          setIdleTime(prev => prev + 1);
+          // Add 1/60th of a minute to sync queue
+          trackingState.current.idleMinutesToSync += (1 / 60);
+        } else {
+          setActiveTime(prev => prev + 1);
+          // Add 1/60th of a minute to sync queue
+          trackingState.current.activeMinutesToSync += (1 / 60);
         }
-      } else {
-        setActiveTime(prev => prev + 1);
-        // Every 60 seconds of active time, queue 1 minute for sync
-        if ((activeTime + 1) % 60 === 0) {
-          trackingState.current.activeMinutesToSync += 1;
-        }
-      }
-    }, 1000);
+      }, 1000);
+    }
 
     return () => clearInterval(interval);
-  }, [settings?.idle_threshold, activeTime, idleTime]);
+  }, [isTracking, isPaused, settings?.idle_threshold]);
 
   // Sync data to server (runs every minute)
   useEffect(() => {
