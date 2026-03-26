@@ -52,6 +52,11 @@ async function startServer() {
 
   app.use(express.json());
 
+  app.use("/api", (req, res, next) => {
+    console.log("API request:", req.method, req.url);
+    next();
+  });
+
   // API routes
   app.get("/api/db-health", async (req, res) => {
     if (!process.env.DB_HOST || process.env.DB_HOST === '') {
@@ -450,6 +455,51 @@ async function startServer() {
         content TEXT,
         date DATE NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create time tracking tables
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS time_tracking_settings (
+        company_id INT NOT NULL,
+        employee_id INT NOT NULL,
+        is_enabled BOOLEAN DEFAULT FALSE,
+        screenshot_enabled BOOLEAN DEFAULT FALSE,
+        screenshot_interval INT DEFAULT 10,
+        idle_threshold INT DEFAULT 5,
+        PRIMARY KEY (company_id, employee_id),
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS time_tracking_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        employee_id INT NOT NULL,
+        date DATE NOT NULL,
+        hour INT NOT NULL,
+        active_minutes INT DEFAULT 0,
+        idle_minutes INT DEFAULT 0,
+        keystrokes INT DEFAULT 0,
+        mouse_clicks INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_log (employee_id, date, hour),
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS time_tracking_screenshots (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        employee_id INT NOT NULL,
+        image_data LONGTEXT NOT NULL,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
       )
     `);
@@ -885,6 +935,198 @@ async function startServer() {
     }
   });
 
+  // --- Time Tracking APIs ---
+  app.get("/api/time-tracking/settings/:company_id/:employee_id", async (req, res) => {
+    try {
+      const { company_id, employee_id } = req.params;
+      const connection = await db.getConnection();
+      const [rows] = await connection.query(
+        "SELECT * FROM time_tracking_settings WHERE company_id = ? AND employee_id = ?",
+        [company_id, employee_id]
+      ) as [Record<string, unknown>[], unknown];
+      connection.release();
+      
+      if (rows.length > 0) {
+        res.json(rows[0]);
+      } else {
+        res.json({
+          company_id: parseInt(company_id),
+          employee_id: parseInt(employee_id),
+          is_enabled: false,
+          screenshot_enabled: false,
+          screenshot_interval: 10,
+          idle_threshold: 5
+        });
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching time tracking settings:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/time-tracking/settings", async (req, res) => {
+    try {
+      const { company_id, employee_id, is_enabled, screenshot_enabled, screenshot_interval, idle_threshold } = req.body;
+      const connection = await db.getConnection();
+      
+      await connection.query(`
+        INSERT INTO time_tracking_settings (company_id, employee_id, is_enabled, screenshot_enabled, screenshot_interval, idle_threshold)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          is_enabled = VALUES(is_enabled),
+          screenshot_enabled = VALUES(screenshot_enabled),
+          screenshot_interval = VALUES(screenshot_interval),
+          idle_threshold = VALUES(idle_threshold)
+      `, [company_id, employee_id, is_enabled, screenshot_enabled, screenshot_interval, idle_threshold]);
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error saving time tracking settings:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/time-tracking/sync", async (req, res) => {
+    try {
+      const { company_id, employee_id, date, hour, active_minutes, idle_minutes, keystrokes, mouse_clicks } = req.body;
+      const connection = await db.getConnection();
+      
+      await connection.query(`
+        INSERT INTO time_tracking_logs (company_id, employee_id, date, hour, active_minutes, idle_minutes, keystrokes, mouse_clicks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          active_minutes = active_minutes + VALUES(active_minutes),
+          idle_minutes = idle_minutes + VALUES(idle_minutes),
+          keystrokes = keystrokes + VALUES(keystrokes),
+          mouse_clicks = mouse_clicks + VALUES(mouse_clicks)
+      `, [company_id, employee_id, date, hour, active_minutes || 0, idle_minutes || 0, keystrokes || 0, mouse_clicks || 0]);
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error syncing time tracking data:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/time-tracking/screenshot", async (req, res) => {
+    try {
+      const { company_id, employee_id, image_data } = req.body;
+      const connection = await db.getConnection();
+      
+      await connection.query(
+        "INSERT INTO time_tracking_screenshots (company_id, employee_id, image_data) VALUES (?, ?, ?)",
+        [company_id, employee_id, image_data]
+      );
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error saving screenshot:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/time-tracking/logs/:company_id/:employee_id", async (req, res) => {
+    try {
+      const { company_id, employee_id } = req.params;
+      const { date } = req.query;
+      const connection = await db.getConnection();
+      
+      let query = "SELECT * FROM time_tracking_logs WHERE company_id = ? AND employee_id = ?";
+      const params: (string | number)[] = [company_id, employee_id];
+      
+      if (date) {
+        query += " AND date = ?";
+        params.push(date);
+      }
+      
+      query += " ORDER BY date DESC, hour DESC";
+      
+      const [rows] = await connection.query(query, params);
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching time tracking logs:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/time-tracking/screenshots/:company_id/:employee_id", async (req, res) => {
+    try {
+      const { company_id, employee_id } = req.params;
+      const { date } = req.query;
+      const connection = await db.getConnection();
+      
+      let query = "SELECT * FROM time_tracking_screenshots WHERE company_id = ? AND employee_id = ?";
+      const params: (string | number)[] = [company_id, employee_id];
+      
+      if (date) {
+        query += " AND DATE(timestamp) = ?";
+        params.push(date);
+      }
+      
+      query += " ORDER BY timestamp DESC";
+      
+      const [rows] = await connection.query(query, params);
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching screenshots:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/time-tracking/report/:company_id", async (req, res) => {
+    try {
+      const { company_id } = req.params;
+      const { start_date, end_date, employee_id } = req.query;
+      const connection = await db.getConnection();
+      
+      let query = `
+        SELECT 
+          l.employee_id, 
+          e.name as employee_name,
+          l.date,
+          SUM(l.active_minutes) as total_active_minutes,
+          SUM(l.idle_minutes) as total_idle_minutes,
+          SUM(l.keystrokes) as total_keystrokes,
+          SUM(l.mouse_clicks) as total_mouse_clicks
+        FROM time_tracking_logs l
+        JOIN employees e ON l.employee_id = e.id
+        WHERE l.company_id = ?
+      `;
+      const params: (string | number)[] = [company_id];
+      
+      if (start_date && end_date) {
+        query += " AND l.date BETWEEN ? AND ?";
+        params.push(start_date, end_date);
+      }
+      
+      if (employee_id) {
+        query += " AND l.employee_id = ?";
+        params.push(employee_id);
+      }
+      
+      query += " GROUP BY l.employee_id, l.date ORDER BY l.date DESC, e.name ASC";
+      
+      const [rows] = await connection.query(query, params);
+      connection.release();
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching time tracking report:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Employee Attendance API
   app.post("/api/employee/attendance/action", async (req, res) => {
     let connection;
@@ -1203,6 +1445,7 @@ async function startServer() {
 
   // Company Admin Login
   app.post("/api/company-admin/login", async (req, res) => {
+    console.log("Login attempt:", req.body);
     const { username, password } = req.body;
     try {
       const connection = await db.getConnection();
@@ -1219,8 +1462,14 @@ async function startServer() {
       }
     } catch (error: unknown) {
       const err = error as Error;
+      console.error("Login error:", err);
       res.status(500).json({ success: false, message: err.message });
     }
+  });
+
+  app.post("*all", (req, res, next) => {
+    console.log("POST request:", req.method, req.url);
+    next();
   });
 
   // Employee Login
@@ -2050,7 +2299,7 @@ async function startServer() {
     console.log(`Serving static files from: ${distPath}`);
     app.use(express.static(distPath));
     
-    app.get('(.*)', (req, res) => {
+    app.get('*all', (req, res) => {
       const indexPath = path.resolve(distPath, 'index.html');
       res.sendFile(indexPath, (err) => {
         if (err) {

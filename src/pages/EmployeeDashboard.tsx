@@ -5,10 +5,11 @@ import {
   AlertCircle, Plus, 
   ChevronLeft, ChevronRight, StickyNote,
   CalendarDays, History, ClipboardList,
-  Activity
+  Activity, Play, Pause, Square, Monitor, Keyboard
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, differenceInDays } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTimeTracking } from '../contexts/TimeTrackingContext';
 
 interface AttendanceRecord {
   id: number;
@@ -66,6 +67,7 @@ export default function EmployeeDashboard() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
   const [newNote, setNewNote] = useState({ title: '', content: '' });
   const [newLeave, setNewLeave] = useState({ 
     leave_type: 'Annual Leave', 
@@ -74,6 +76,20 @@ export default function EmployeeDashboard() {
     reason: '' 
   });
   const employee = JSON.parse(localStorage.getItem('employee') || '{}');
+  
+  const { 
+    isTracking, 
+    isPaused, 
+    activeTime, 
+    idleTime, 
+    settings, 
+    hasConsent, 
+    setHasConsent,
+    startTracking,
+    pauseTracking,
+    resumeTracking,
+    stopTracking
+  } = useTimeTracking();
 
   const fetchDashboardData = useCallback(async () => {
     if (!employee.id) return;
@@ -99,6 +115,27 @@ export default function EmployeeDashboard() {
     const interval = setInterval(fetchDashboardData, 60000); // Refresh every minute
     return () => clearInterval(interval);
   }, [employee.id, navigate, fetchDashboardData]);
+
+  useEffect(() => {
+    if (settings?.is_enabled && !hasConsent) {
+      setShowConsentModal(true);
+    }
+  }, [settings?.is_enabled, hasConsent]);
+
+  const handleConsent = (agreed: boolean) => {
+    setHasConsent(agreed);
+    setShowConsentModal(false);
+    if (agreed && stats?.today.punchIn && !stats?.today.punchOut) {
+      startTracking();
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   const handleAddNote = async () => {
     if (!newNote.title || !newNote.content) return;
@@ -222,6 +259,82 @@ export default function EmployeeDashboard() {
             </p>
           </div>
         </div>
+        
+        {/* Time Tracking Widget */}
+        {settings?.is_enabled && hasConsent && (
+          <div className="flex items-center gap-6 ml-auto pl-8 border-l border-slate-100">
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                isTracking && !isPaused ? 'bg-blue-50 text-blue-600' : 
+                isPaused ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-400'
+              }`}>
+                {isTracking && !isPaused ? <Activity size={24} className="animate-pulse" /> : 
+                 isPaused ? <Pause size={24} /> : <Square size={24} />}
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {isTracking && !isPaused ? 'Tracking Active' : isPaused ? 'Tracking Paused' : 'Tracking Stopped'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-black text-slate-900 font-mono">
+                    {formatTime(activeTime)}
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Active</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                <Coffee size={12} />
+                Idle: <span className="font-mono text-slate-700">{formatTime(idleTime)}</span>
+              </div>
+              {settings.screenshot_enabled && (
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                  <Monitor size={12} />
+                  Screenshots: <span className="text-blue-600">On</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 ml-4">
+              {!isTracking ? (
+                <button 
+                  onClick={startTracking}
+                  className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors"
+                  title="Start Tracking"
+                >
+                  <Play size={18} className="fill-current" />
+                </button>
+              ) : isPaused ? (
+                <button 
+                  onClick={resumeTracking}
+                  className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors"
+                  title="Resume Tracking"
+                >
+                  <Play size={18} className="fill-current" />
+                </button>
+              ) : (
+                <button 
+                  onClick={pauseTracking}
+                  className="p-3 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 transition-colors"
+                  title="Pause Tracking"
+                >
+                  <Pause size={18} className="fill-current" />
+                </button>
+              )}
+              {isTracking && (
+                <button 
+                  onClick={stopTracking}
+                  className="p-3 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
+                  title="Stop Tracking"
+                >
+                  <Square size={18} className="fill-current" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Today Time Log */}
@@ -597,6 +710,81 @@ export default function EmployeeDashboard() {
                 >
                   Submit Request
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Consent Modal */}
+      <AnimatePresence>
+        {showConsentModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 border-b border-slate-50 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <Monitor size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Time Tracking Enabled</h3>
+                  <p className="text-xs font-bold text-slate-500 mt-1">Please review the tracking policy</p>
+                </div>
+              </div>
+              <div className="p-8 space-y-6">
+                <div className="space-y-4 text-sm text-slate-600 font-medium">
+                  <p>Your company has enabled time tracking for your account. When active, the system will monitor:</p>
+                  <ul className="space-y-3">
+                    <li className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Activity size={12} className="text-slate-600" />
+                      </div>
+                      <span><strong>Active Time:</strong> Measured by mouse movement and keyboard activity.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Keyboard size={12} className="text-slate-600" />
+                      </div>
+                      <span><strong>Activity Levels:</strong> Counts of keystrokes and mouse clicks (actual keys typed are <strong>never</strong> recorded).</span>
+                    </li>
+                    {settings?.screenshot_enabled && (
+                      <li className="flex items-start gap-3">
+                        <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center shrink-0 mt-0.5">
+                          <Monitor size={12} className="text-slate-600" />
+                        </div>
+                        <span><strong>Screenshots:</strong> Captured automatically every {settings.screenshot_interval} minutes. Sensitive fields (like passwords) are blurred.</span>
+                      </li>
+                    )}
+                  </ul>
+                  <div className="bg-blue-50 p-4 rounded-2xl mt-6 border border-blue-100">
+                    <p className="text-blue-800 text-xs leading-relaxed">
+                      <strong>Privacy Note:</strong> Tracking only occurs when you are punched in and the tracker is active. You can pause tracking manually during breaks.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    onClick={() => handleConsent(false)}
+                    className="flex-1 py-4 bg-slate-100 text-slate-600 font-black text-xs tracking-widest uppercase rounded-2xl hover:bg-slate-200 transition-all"
+                  >
+                    Decline
+                  </button>
+                  <button 
+                    onClick={() => handleConsent(true)}
+                    className="flex-1 py-4 bg-blue-600 text-white font-black text-xs tracking-widest uppercase rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100"
+                  >
+                    I Understand & Agree
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

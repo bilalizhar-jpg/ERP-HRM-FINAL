@@ -1,5 +1,9 @@
 {
   "name": "multifunctionalHRM-ERP",
   "description": "A multifunctional HRM and ERP platform for business operations.",
-  "requestFramePermissions": ["camera", "microphone", "geolocation"]
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
 }

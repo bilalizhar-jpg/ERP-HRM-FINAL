@@ -47,6 +47,7 @@ import CompanyAdminAttendance from './pages/CompanyAdminAttendance';
 import CompanyAdminDepartment from './pages/CompanyAdminDepartment';
 import CompanyAdminDesignation from './pages/CompanyAdminDesignation';
 import CompanyAdminEmployee from './pages/CompanyAdminEmployee';
+import CompanyAdminTimeTracking from './pages/CompanyAdminTimeTracking';
 import EmployeeLayout from './components/EmployeeLayout';
 import EmployeeAttendance from './pages/EmployeeAttendance';
 import EmployeeLogin from './pages/EmployeeLogin';
@@ -104,7 +105,7 @@ function App() {
         <Route path="/super-admin/employer/assets" element={<Assets />} />
         <Route path="/super-admin/employer/expenses" element={<Expenses />} />
         <Route path="/super-admin/employer/reports" element={<Reports />} />
-        <Route path="/super-admin/employer/settings" element={<Settings />} />
+        <Route path="/super-admin/employer/settings/*" element={<Settings />} />
         <Route path="/company-admin" element={<CompanyAdminLogin />} />
         <Route path="/company-admin" element={<CompanyAdminLayout />}>
           <Route path="dashboard" element={<CompanyAdminDashboard />} />
@@ -112,6 +113,8 @@ function App() {
           <Route path="department" element={<CompanyAdminDepartment />} />
           <Route path="designation" element={<CompanyAdminDesignation />} />
           <Route path="employee" element={<CompanyAdminEmployee />} />
+          <Route path="time-track" element={<CompanyAdminTimeTracking />} />
+          <Route path="settings/*" element={<Settings />} />
           {/* Add more routes here as needed */}
         </Route>
         <Route path="/employee/login" element={<EmployeeLogin />} />

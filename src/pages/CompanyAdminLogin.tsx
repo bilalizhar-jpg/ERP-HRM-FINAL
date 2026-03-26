@@ -18,17 +18,25 @@ export default function CompanyAdminLogin() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
-      const data = await res.json();
-      if (data.success) {
+      
+      let data;
+      const text = await res.text();
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(text || res.statusText);
+      }
+
+      if (res.ok && data.success) {
         // Store company info in localStorage or context
         localStorage.setItem('companyAdmin', JSON.stringify(data.company));
         navigate('/company-admin/dashboard');
       } else {
-        alert("Invalid credentials");
+        alert(data.message || "Invalid credentials");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
-      alert("Error logging in");
+      alert(error.message || "Error logging in");
     } finally {
       setLoading(false);
     }

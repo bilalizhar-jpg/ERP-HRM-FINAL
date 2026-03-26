@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MapPin, Camera, Clock, Coffee, LogOut, CheckCircle, Activity, ShieldCheck, ChevronRight, User, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTimeTracking } from '../contexts/TimeTrackingContext';
 
 interface AttendanceRecord {
   id: number;
@@ -28,6 +29,8 @@ export default function EmployeeAttendance() {
   const [location, setLocation] = useState<{ lat: number | null, lng: number | null }>({ lat: null, lng: null });
   const videoRef = useRef<HTMLVideoElement>(null);
   const employee = JSON.parse(localStorage.getItem('employee') || '{}');
+  
+  const { startTracking, pauseTracking, resumeTracking, stopTracking, hasConsent } = useTimeTracking();
 
   useEffect(() => {
     if (!employee.id) {
@@ -126,6 +129,19 @@ export default function EmployeeAttendance() {
           console.log(`[Attendance] ${action} successful`);
           setSelfie(null);
           await fetchStats();
+          
+          // Time Tracking Integration
+          if (hasConsent) {
+            if (action === 'check-in') {
+              startTracking();
+            } else if (action === 'break-start') {
+              pauseTracking();
+            } else if (action === 'break-end') {
+              resumeTracking();
+            } else if (action === 'check-out') {
+              stopTracking();
+            }
+          }
         } else {
           console.error(`[Attendance] ${action} failed:`, data.error);
           alert(data.error || `Failed to ${action}`);
