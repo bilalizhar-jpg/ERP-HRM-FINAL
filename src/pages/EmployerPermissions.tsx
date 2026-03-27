@@ -19,12 +19,10 @@ const modules = employerModules.map(m => m.name);
 
 export default function EmployerPermissions() {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
-  // State to hold selected company ID for each module row
-  const [rowCompanies, setRowCompanies] = useState<Record<string, number>>({});
 
   // State to hold permissions: { moduleName: { companyId: isGranted } }
   const [permissions, setPermissions] = useState<Record<string, Record<number, boolean>>>({});
@@ -42,14 +40,9 @@ export default function EmployerPermissions() {
           const permData: Permission[] = await permRes.json();
 
           setCompanies(compData);
-
-          // Initialize row selections (default to first company if exists)
-          const initialRowComps: Record<string, number> = {};
-          const defaultCompId = compData.length > 0 ? compData[0].id : 0;
-          modules.forEach(mod => {
-            initialRowComps[mod] = defaultCompId;
-          });
-          setRowCompanies(initialRowComps);
+          if (compData.length > 0) {
+            setSelectedCompanyId(compData[0].id);
+          }
 
           // Initialize permissions state
           const initialPerms: Record<string, Record<number, boolean>> = {};
@@ -73,21 +66,27 @@ export default function EmployerPermissions() {
     fetchData();
   }, []);
 
-  const handleCompanyChange = (module: string, companyId: number) => {
-    setRowCompanies(prev => ({
-      ...prev,
-      [module]: companyId
-    }));
-  };
-
-  const handlePermissionChange = (module: string, companyId: number, granted: boolean) => {
+  const handlePermissionChange = (module: string, granted: boolean) => {
+    if (selectedCompanyId === null) return;
     setPermissions(prev => ({
       ...prev,
       [module]: {
         ...prev[module],
-        [companyId]: granted
+        [selectedCompanyId]: granted
       }
     }));
+  };
+
+  const handleBulkAction = (granted: boolean) => {
+    if (selectedCompanyId === null) return;
+    const updatedPerms = { ...permissions };
+    modules.forEach(mod => {
+      updatedPerms[mod] = {
+        ...updatedPerms[mod],
+        [selectedCompanyId]: granted
+      };
+    });
+    setPermissions(updatedPerms);
   };
 
   const handleSave = async () => {
@@ -132,7 +131,7 @@ export default function EmployerPermissions() {
       <div className="min-h-screen bg-[#f8f9fa] flex">
         <SuperAdminSidebar />
         <main className="flex-1 p-8 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
         </main>
       </div>
     );
@@ -143,104 +142,143 @@ export default function EmployerPermissions() {
       <SuperAdminSidebar />
       
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
-                <Shield className="text-blue-600" size={32} />
-                Employer Panel Permissions
-              </h1>
-              <p className="text-slate-500 mt-2">Manage module access and restrictions for different companies</p>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-16 h-16 bg-blue-600 rounded-[2rem] flex items-center justify-center text-white shadow-2xl shadow-blue-200">
+                  <Shield size={32} />
+                </div>
+                <h1 className="text-5xl font-black text-slate-900 tracking-tight uppercase">
+                  Employer <span className="text-blue-600">Permissions</span>
+                </h1>
+              </div>
+              <p className="text-slate-500 font-medium text-lg max-w-2xl">
+                Configure module accessibility across your entire company network. Toggle permissions with precision.
+              </p>
             </div>
+            
             <button 
               onClick={handleSave}
               disabled={saving || companies.length === 0}
-              className="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative px-10 py-5 bg-slate-900 text-white font-black rounded-[2rem] hover:bg-blue-600 transition-all duration-500 shadow-2xl hover:shadow-blue-200 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
             >
-              {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
-              {saving ? 'Saving...' : 'Save Changes'}
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="relative flex items-center gap-3">
+                {saving ? <Loader2 size={24} className="animate-spin" /> : <Save size={24} className="group-hover:scale-110 transition-transform duration-500" />}
+                <span className="text-sm tracking-[0.2em] uppercase">{saving ? 'Processing...' : 'Save Protocol'}</span>
+              </div>
             </button>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-6 border-b border-slate-200 bg-slate-50/50">
-              <div className="relative max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+          <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+            <div className="p-10 border-b border-slate-100 bg-slate-50/30 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+              <div className="flex-1 space-y-4">
+                <label className="text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase">Target Company Selection</label>
+                <select 
+                  className="w-full max-w-xl py-5 px-8 rounded-[1.5rem] border-2 border-slate-100 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 text-sm font-black tracking-widest bg-white uppercase appearance-none cursor-pointer hover:border-slate-200 transition-all shadow-sm"
+                  value={selectedCompanyId || ''}
+                  onChange={(e) => setSelectedCompanyId(parseInt(e.target.value))}
+                >
+                  {companies.map(c => (
+                    <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                <button 
+                  onClick={() => handleBulkAction(true)}
+                  className="w-full sm:w-auto px-8 py-4 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-2xl text-[10px] font-black tracking-widest uppercase hover:bg-emerald-500 hover:text-white transition-all duration-300"
+                >
+                  Grant All Access
+                </button>
+                <button 
+                  onClick={() => handleBulkAction(false)}
+                  className="w-full sm:w-auto px-8 py-4 bg-red-50 text-red-600 border border-red-100 rounded-2xl text-[10px] font-black tracking-widest uppercase hover:bg-red-500 hover:text-white transition-all duration-300"
+                >
+                  Restrict All Access
+                </button>
+              </div>
+            </div>
+
+            <div className="p-10 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="relative flex-1 max-w-xl">
+                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                 <input 
                   type="text"
-                  placeholder="Search modules..."
+                  placeholder="SEARCH MODULES..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  className="w-full pl-14 pr-6 py-5 bg-white border-2 border-slate-100 rounded-[1.5rem] text-xs font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all uppercase"
                 />
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black tracking-widest uppercase border border-blue-100">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  {filteredModules.length} Modules Found
+                </div>
               </div>
             </div>
 
             <div className="overflow-x-auto">
               {companies.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">
-                  No companies registered yet. Please add a company first.
+                <div className="p-24 text-center">
+                  <div className="w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
+                    <Shield className="text-slate-200" size={48} />
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-wider mb-2">No Companies Detected</h3>
+                  <p className="text-slate-500 font-medium">Please register a company in the core protocol first.</p>
                 </div>
               ) : (
-                <table className="w-full">
+                <table className="w-full border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200">
-                      <th className="text-left py-4 px-6 font-semibold text-slate-700 w-1/4">Module Name</th>
-                      <th className="text-left py-4 px-6 font-semibold text-slate-700 w-1/4">Select Company</th>
-                      <th className="text-center py-4 px-6 font-semibold text-slate-700 w-1/4">Access Granted</th>
-                      <th className="text-center py-4 px-6 font-semibold text-slate-700 w-1/4">Access Restricted</th>
+                    <tr className="bg-slate-50/50">
+                      <th className="text-left py-8 px-10 font-black text-[11px] text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Module Identity</th>
+                      <th className="text-center py-8 px-10 font-black text-[11px] text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Authorization Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-50">
                     {filteredModules.map((module) => {
-                      const currentCompanyId = rowCompanies[module];
-                      const isGranted = permissions[module]?.[currentCompanyId] ?? true;
+                      const isGranted = selectedCompanyId !== null ? (permissions[module]?.[selectedCompanyId] ?? true) : true;
 
                       return (
-                        <tr key={module} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="py-4 px-6 font-medium text-slate-900">{module}</td>
-                          <td className="py-4 px-6">
-                            <select 
-                              className="w-full py-2 px-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm bg-white"
-                              value={currentCompanyId}
-                              onChange={(e) => handleCompanyChange(module, parseInt(e.target.value))}
-                            >
-                              {companies.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <label className="inline-flex items-center justify-center w-full cursor-pointer group">
-                              <div className="relative flex items-center justify-center">
-                                <input 
-                                  type="radio" 
-                                  name={`access-${module}`} 
-                                  className="peer sr-only"
-                                  checked={isGranted}
-                                  onChange={() => handlePermissionChange(module, currentCompanyId, true)}
-                                />
-                                <div className="w-6 h-6 rounded-full border-2 border-slate-300 peer-checked:border-blue-600 peer-checked:bg-blue-600 transition-all flex items-center justify-center">
-                                  {isGranted && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
-                                </div>
+                        <tr key={module} className="group hover:bg-slate-50/50 transition-all duration-300">
+                          <td className="py-8 px-10">
+                            <div className="flex items-center gap-4">
+                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 ${isGranted ? 'bg-blue-50 text-blue-600 group-hover:scale-110' : 'bg-slate-100 text-slate-400 opacity-50'}`}>
+                                <Shield size={20} />
                               </div>
-                            </label>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <label className="inline-flex items-center justify-center w-full cursor-pointer group">
-                              <div className="relative flex items-center justify-center">
-                                <input 
-                                  type="radio" 
-                                  name={`access-${module}`} 
-                                  className="peer sr-only"
-                                  checked={!isGranted}
-                                  onChange={() => handlePermissionChange(module, currentCompanyId, false)}
-                                />
-                                <div className="w-6 h-6 rounded-full border-2 border-slate-300 peer-checked:border-red-600 peer-checked:bg-red-600 transition-all flex items-center justify-center">
-                                  {!isGranted && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
-                                </div>
+                              <div>
+                                <span className="block text-sm font-black text-slate-900 uppercase tracking-wider mb-1">{module}</span>
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Core Module</span>
                               </div>
-                            </label>
+                            </div>
+                          </td>
+                          <td className="py-8 px-10">
+                            <div className="flex items-center justify-center gap-4">
+                              <button
+                                onClick={() => handlePermissionChange(module, true)}
+                                className={`flex-1 max-w-[160px] py-4 rounded-2xl text-[10px] font-black tracking-[0.15em] uppercase transition-all duration-300 border-2 ${
+                                  isGranted 
+                                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200' 
+                                    : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'
+                                }`}
+                              >
+                                Access Granted
+                              </button>
+                              <button
+                                onClick={() => handlePermissionChange(module, false)}
+                                className={`flex-1 max-w-[160px] py-4 rounded-2xl text-[10px] font-black tracking-[0.15em] uppercase transition-all duration-300 border-2 ${
+                                  !isGranted 
+                                    ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-200' 
+                                    : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'
+                                }`}
+                              >
+                                Access Restricted
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -249,6 +287,27 @@ export default function EmployerPermissions() {
                 </table>
               )}
             </div>
+          </div>
+          
+          <div className="mt-12 p-10 bg-blue-600 rounded-[2.5rem] text-white flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl shadow-blue-200">
+            <div className="flex items-center gap-6">
+              <div className="w-20 h-20 bg-white/20 backdrop-blur-xl rounded-[2rem] flex items-center justify-center">
+                <Shield size={40} />
+              </div>
+              <div>
+                <h3 className="text-2xl font-black uppercase tracking-tight mb-2 text-white">Security Protocol</h3>
+                <p className="text-blue-100 font-medium max-w-md">
+                  All permission changes are logged and applied instantly to the employer portal. Ensure accuracy before saving.
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={handleSave}
+              disabled={saving || companies.length === 0}
+              className="px-12 py-5 bg-white text-blue-600 font-black rounded-[2rem] hover:bg-blue-50 transition-all duration-300 shadow-xl text-sm tracking-widest uppercase disabled:opacity-50"
+            >
+              Commit Changes
+            </button>
           </div>
         </div>
       </main>

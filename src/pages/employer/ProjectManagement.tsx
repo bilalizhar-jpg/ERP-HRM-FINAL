@@ -2,7 +2,7 @@ import { useLocation } from 'react-router-dom';
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
 import ModulePlaceholder from '../../components/ModulePlaceholder';
 
-export default function Department() {
+export default function ProjectManagement() {
   const location = useLocation();
   const isSuperAdminPath = location.pathname.startsWith('/super-admin');
 
@@ -12,13 +12,13 @@ export default function Department() {
       
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
         <header className="mb-12">
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">Departments</h1>
-          <p className="text-slate-500 font-medium">Manage company departments.</p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">Project Management</h1>
+          <p className="text-slate-500 font-medium">Manage company projects and tasks.</p>
         </header>
 
         <ModulePlaceholder 
-          title="Departments" 
-          description="Company departments are managed by employers." 
+          title="Project Management" 
+          description="Project management module is under development." 
         />
       </main>
     </div>

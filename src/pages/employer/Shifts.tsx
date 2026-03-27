@@ -1,10 +1,14 @@
+import { useLocation } from 'react-router-dom';
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
 import ModulePlaceholder from '../../components/ModulePlaceholder';
 
 export default function Shifts() {
+  const location = useLocation();
+  const isSuperAdminPath = location.pathname.startsWith('/super-admin');
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex">
-      <SuperAdminSidebar />
+      {isSuperAdminPath && <SuperAdminSidebar />}
       
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
         <header className="mb-12">

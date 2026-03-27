@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
-import { Upload, MapPin, Edit2, Trash2 } from 'lucide-react';
+import { Upload } from 'lucide-react';
 
 export default function Settings() {
   const location = useLocation();
-  const isCompanyAdmin = location.pathname.startsWith('/company-admin');
+  const isSuperAdminPath = location.pathname.startsWith('/super-admin');
   
   const [companyProfile, setCompanyProfile] = useState({
     name: 'Acme Corp',
@@ -22,6 +22,50 @@ export default function Settings() {
     taxRate: '10',
     timeZone: 'Africa/Abidjan'
   });
+
+  type Shift = {
+    id: string;
+    name: string;
+    startTime: string;
+    endTime: string;
+    breakTime: number;
+    gracePeriod: number;
+    minWorkingHours: number;
+    lateMarkRule: string;
+    status: 'Active' | 'Deactive';
+  };
+
+  const [shifts, setShifts] = useState<Shift[]>([
+    { id: '1', name: 'Morning', startTime: '09:00', endTime: '17:00', breakTime: 60, gracePeriod: 15, minWorkingHours: 8, lateMarkRule: '15', status: 'Active' },
+    { id: '2', name: 'Evening', startTime: '14:00', endTime: '22:00', breakTime: 60, gracePeriod: 15, minWorkingHours: 8, lateMarkRule: '15', status: 'Active' },
+    { id: '3', name: 'Night', startTime: '22:00', endTime: '06:00', breakTime: 60, gracePeriod: 15, minWorkingHours: 8, lateMarkRule: '15', status: 'Active' },
+  ]);
+
+  const calculateShiftMetrics = (shift: Shift) => {
+    const start = new Date(`1970-01-01T${shift.startTime}:00`);
+    const end = new Date(`1970-01-01T${shift.endTime}:00`);
+    
+    // Handle overnight shifts
+    if (end <= start) {
+      end.setDate(end.getDate() + 1);
+    }
+    
+    const durationMs = end.getTime() - start.getTime();
+    const durationHours = durationMs / (1000 * 60 * 60);
+    const breakHours = shift.breakTime / 60;
+    const netWorkingHours = Math.max(0, durationHours - breakHours);
+    const overtime = Math.max(0, netWorkingHours - shift.minWorkingHours);
+    
+    return {
+      duration: durationHours.toFixed(2),
+      netWorkingHours: netWorkingHours.toFixed(2),
+      overtime: overtime.toFixed(2)
+    };
+  };
+
+  const updateShift = (id: string, field: keyof Shift, value: string | number) => {
+    setShifts(shifts.map(s => s.id === id ? { ...s, [field]: value } : s));
+  };
 
   const handleSaveProfile = async () => {
     try {
@@ -60,88 +104,147 @@ export default function Settings() {
   };
 
   const GeneralSettingsContent = () => (
-    <>
+    <div className="space-y-8">
       {/* Company Profile Section */}
-      <section className="bg-white p-8 rounded-[2rem] shadow-xl border border-slate-100 mb-12">
-        <h2 className="text-xl font-black text-slate-900 uppercase tracking-wider mb-6">Company Profile</h2>
+      <section className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-lg font-black text-slate-900 uppercase tracking-wider">Company Profile</h2>
+          <button onClick={handleSaveProfile} className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-blue-700 transition-all">Save Changes</button>
+        </div>
         
-        <div className="flex items-center gap-6 mb-8">
-          <div className="w-24 h-24 bg-slate-100 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-300">
-            <Upload className="text-slate-400" />
+        <div className="flex items-center gap-8 mb-8">
+          <div className="w-24 h-24 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-200">
+            <Upload className="text-slate-400" size={24} />
           </div>
-          <button className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700">Change Logo</button>
+          <div>
+            <button className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-slate-800 transition-all">Change Logo</button>
+            <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-wider">Recommended: 200x200px</p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 mb-6">
-          <input type="text" placeholder="Company Name" value={companyProfile.name} onChange={e => setCompanyProfile({...companyProfile, name: e.target.value})} className="p-4 bg-slate-50 rounded-xl border border-slate-200" />
-          <input type="text" placeholder="Website" value={companyProfile.website} onChange={e => setCompanyProfile({...companyProfile, website: e.target.value})} className="p-4 bg-slate-50 rounded-xl border border-slate-200" />
-          <input type="email" placeholder="Official Email" value={companyProfile.email} onChange={e => setCompanyProfile({...companyProfile, email: e.target.value})} className="p-4 bg-slate-50 rounded-xl border border-slate-200" />
-          <input type="tel" placeholder="Phone Number" value={companyProfile.phone} onChange={e => setCompanyProfile({...companyProfile, phone: e.target.value})} className="p-4 bg-slate-50 rounded-xl border border-slate-200" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Company Name</label>
+            <input type="text" value={companyProfile.name} onChange={e => setCompanyProfile({...companyProfile, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Website</label>
+            <input type="text" value={companyProfile.website} onChange={e => setCompanyProfile({...companyProfile, website: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Official Email</label>
+            <input type="email" value={companyProfile.email} onChange={e => setCompanyProfile({...companyProfile, email: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Phone Number</label>
+            <input type="tel" value={companyProfile.phone} onChange={e => setCompanyProfile({...companyProfile, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+          </div>
         </div>
-        <textarea placeholder="About Us" value={companyProfile.about} onChange={e => setCompanyProfile({...companyProfile, about: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 mb-6" rows={4} />
-        
-        <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-400 mb-6">
-          <MapPin className="mx-auto mb-2" />
-          No additional addresses added yet. <button className="text-indigo-600 font-bold">+ Add Address</button>
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">About Us</label>
+          <textarea value={companyProfile.about} onChange={e => setCompanyProfile({...companyProfile, about: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" rows={4} />
         </div>
-
-        <button onClick={handleSaveProfile} className="px-8 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700">Save Company Profile</button>
       </section>
 
       {/* Rules Section */}
-      <section>
-        <h2 className="text-xl font-black text-slate-900 uppercase tracking-wider mb-6">Rules</h2>
-        <div className="grid grid-cols-2 gap-8">
-          {/* Languages & Currencies */}
-          <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-slate-100">
-             <h3 className="font-bold mb-4">Languages</h3>
-             <select className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 mb-4">
+      <section className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-lg font-black text-slate-900 uppercase tracking-wider">Business Rules</h2>
+          <button onClick={handleSaveRules} className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-blue-700 transition-all">Save Rules</button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-4">
+             <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Languages</h3>
+             <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
                <option>English (en)</option>
              </select>
-             <div className="space-y-2">
-               {['English (en)', 'Spanish (es)', 'French (fr)'].map(lang => (
-                 <div key={lang} className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                   {lang} <div><Edit2 size={16} className="inline mr-2"/> <Trash2 size={16} className="inline"/></div>
-                 </div>
-               ))}
-             </div>
           </div>
           
-          <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-slate-100">
-             <h3 className="font-bold mb-4">Currencies</h3>
-             <select className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 mb-4">
+          <div className="space-y-4">
+             <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Currencies</h3>
+             <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
                <option>US Dollar ($)</option>
              </select>
-             <div className="space-y-2">
-               {['US Dollar ($)', 'Euro (€)', 'British Pound (£)'].map(curr => (
-                 <div key={curr} className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                   {curr} <div><Edit2 size={16} className="inline mr-2"/> <Trash2 size={16} className="inline"/></div>
-                 </div>
-               ))}
-             </div>
           </div>
 
-          {/* Time & Tax */}
-          <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-slate-100">
-            <h3 className="font-bold mb-4">Time Settings</h3>
-            <input type="number" value={rules.taxRate} onChange={e => setRules({...rules, taxRate: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 mb-4" />
-            <select value={rules.timeZone} onChange={e => setRules({...rules, timeZone: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="space-y-4">
+            <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Time Zone</h3>
+            <select value={rules.timeZone} onChange={e => setRules({...rules, timeZone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
               <option>Africa/Abidjan</option>
             </select>
           </div>
 
-          <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-slate-100">
-            <h3 className="font-bold mb-4">Tax</h3>
-            <button onClick={handleSaveRules} className="px-8 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700">Save Rules</button>
+          <div className="space-y-4">
+            <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Tax Rate (%)</h3>
+            <input type="number" value={rules.taxRate} onChange={e => setRules({...rules, taxRate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
           </div>
         </div>
       </section>
-    </>
+
+      {/* Working Hours Setting Section */}
+      <section className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-lg font-black text-slate-900 uppercase tracking-wider">Working Hours Setting</h2>
+          <button className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-blue-700 transition-all">Save Changes</button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {shifts.map((shift) => {
+            const metrics = calculateShiftMetrics(shift);
+            return (
+              <div key={shift.id} className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-black text-slate-900 uppercase">{shift.name} Shift</h3>
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${shift.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                    {shift.status}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Start Time</label>
+                    <input type="time" value={shift.startTime} onChange={e => updateShift(shift.id, 'startTime', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">End Time</label>
+                    <input type="time" value={shift.endTime} onChange={e => updateShift(shift.id, 'endTime', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Break (min)</label>
+                    <input type="number" value={shift.breakTime} onChange={e => updateShift(shift.id, 'breakTime', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Grace (min)</label>
+                    <input type="number" value={shift.gracePeriod} onChange={e => updateShift(shift.id, 'gracePeriod', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" />
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-slate-200 grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Duration</p>
+                    <p className="text-sm font-black text-slate-900">{metrics.duration}h</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Break</p>
+                    <p className="text-sm font-black text-slate-900">{shift.breakTime / 60}h</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Net Hours</p>
+                    <p className="text-sm font-black text-emerald-600">{metrics.netWorkingHours}h</p>
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-slate-200 flex justify-between items-center">
+                  <p className="text-xs font-bold text-slate-600">Overtime: <span className="font-black text-rose-600">{metrics.overtime}h</span></p>
+                  <button className="text-xs font-bold text-blue-600 hover:text-blue-800">Edit Settings</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
   );
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex">
-      {!isCompanyAdmin && <SuperAdminSidebar />}
+      {isSuperAdminPath && <SuperAdminSidebar />}
       
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
         <header className="mb-12">
@@ -151,6 +254,11 @@ export default function Settings() {
 
         <Routes>
           <Route path="general" element={<GeneralSettingsContent />} />
+          <Route path="gmail" element={<div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 text-center"><h2 className="text-xl font-black uppercase tracking-tight mb-4">Gmail Integration</h2><p className="text-slate-500">Connect your corporate Gmail account to sync emails and communications.</p></div>} />
+          <Route path="whatsapp" element={<div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 text-center"><h2 className="text-xl font-black uppercase tracking-tight mb-4">WhatsApp Integration</h2><p className="text-slate-500">Enable WhatsApp notifications and messaging for your employees.</p></div>} />
+          <Route path="rules" element={<div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 text-center"><h2 className="text-xl font-black uppercase tracking-tight mb-4">Business Rules</h2><p className="text-slate-500">Configure custom business logic and operational constraints.</p></div>} />
+          <Route path="roles-permissions" element={<div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 text-center"><h2 className="text-xl font-black uppercase tracking-tight mb-4">Roles & Permissions</h2><p className="text-slate-500">Define user roles and manage access levels across the platform.</p></div>} />
+          <Route path="menu-permissions" element={<div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 text-center"><h2 className="text-xl font-black uppercase tracking-tight mb-4">Menu Permissions</h2><p className="text-slate-500">Control sidebar menu visibility for different user roles.</p></div>} />
           <Route path="*" element={<div className="text-center p-12 bg-white rounded-2xl">Select a setting to configure</div>} />
         </Routes>
       </main>

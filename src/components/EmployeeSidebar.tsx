@@ -1,5 +1,14 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, CalendarCheck, LogOut } from 'lucide-react';
+import { 
+  LayoutDashboard, 
+  CalendarCheck, 
+  LogOut, 
+  CalendarOff, 
+  Bell, 
+  DollarSign, 
+  Laptop, 
+  MessageSquare 
+} from 'lucide-react';
 
 export default function EmployeeSidebar() {
   const location = useLocation();
@@ -13,6 +22,11 @@ export default function EmployeeSidebar() {
   const menuItems = [
     { name: 'Dashboard', path: '/employee/dashboard', icon: LayoutDashboard },
     { name: 'Attendance', path: '/employee/attendance', icon: CalendarCheck },
+    { name: 'Leaves', path: '/employee/leaves', icon: CalendarOff },
+    { name: 'Notice Board', path: '/employee/notice-board', icon: Bell },
+    { name: 'Payroll', path: '/employee/payroll', icon: DollarSign },
+    { name: 'Asset', path: '/employee/assets', icon: Laptop },
+    { name: 'Message', path: '/employee/message', icon: MessageSquare },
   ];
 
   return (

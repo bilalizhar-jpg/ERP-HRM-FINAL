@@ -517,10 +517,96 @@ async function startServer() {
       )
     `);
 
+    // Create salary_slips table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS salary_slips (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        employee_id INT NOT NULL,
+        month VARCHAR(20) NOT NULL,
+        year INT NOT NULL,
+        basic_salary DECIMAL(10, 2) NOT NULL,
+        allowances DECIMAL(10, 2) DEFAULT 0,
+        deductions DECIMAL(10, 2) DEFAULT 0,
+        loan_deductions DECIMAL(10, 2) DEFAULT 0,
+        commissions_bonuses DECIMAL(10, 2) DEFAULT 0,
+        net_salary DECIMAL(10, 2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create loan_requests table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS loan_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        employee_id INT NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        reason TEXT,
+        date DATE NOT NULL,
+        status ENUM('Pending', 'Approved', 'Rejected') DEFAULT 'Pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create commissions_bonuses table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS commissions_bonuses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        employee_id INT NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        date DATE NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
     // Insert default super admin if not exists
     const [existingAdmins] = await connection.query("SELECT * FROM admins WHERE email = 'admin@erp.com'") as [Record<string, unknown>[], unknown];
     if (existingAdmins.length === 0) {
       await connection.query("INSERT INTO admins (email, password, name) VALUES ('admin@erp.com', 'admin123', 'Super Admin')");
+    }
+
+    // Seed sample payroll data for the first employee if none exists
+    const [employees] = await connection.query("SELECT id, company_id FROM employees LIMIT 1") as [Record<string, unknown>[], unknown];
+    if (employees.length > 0) {
+      const empId = employees[0].id as number;
+      const compId = employees[0].company_id as number;
+
+      const [existingSlips] = await connection.query("SELECT id FROM salary_slips WHERE employee_id = ?", [empId]) as [Record<string, unknown>[], unknown];
+      if (existingSlips.length === 0) {
+        await connection.query(
+          "INSERT INTO salary_slips (company_id, employee_id, month, year, basic_salary, allowances, deductions, loan_deductions, commissions_bonuses, net_salary) VALUES (?, ?, 'March', 2026, 5000, 500, 200, 0, 300, 5600)",
+          [compId, empId]
+        );
+        await connection.query(
+          "INSERT INTO salary_slips (company_id, employee_id, month, year, basic_salary, allowances, deductions, loan_deductions, commissions_bonuses, net_salary) VALUES (?, ?, 'February', 2026, 5000, 500, 200, 0, 0, 5300)",
+          [compId, empId]
+        );
+      }
+
+      const [existingLoans] = await connection.query("SELECT id FROM loan_requests WHERE employee_id = ?", [empId]) as [Record<string, unknown>[], unknown];
+      if (existingLoans.length === 0) {
+        await connection.query(
+          "INSERT INTO loan_requests (company_id, employee_id, amount, reason, date, status) VALUES (?, ?, 1000, 'Medical emergency', '2026-03-15', 'Approved')",
+          [compId, empId]
+        );
+      }
+
+      const [existingComms] = await connection.query("SELECT id FROM commissions_bonuses WHERE employee_id = ?", [empId]) as [Record<string, unknown>[], unknown];
+      if (existingComms.length === 0) {
+        await connection.query(
+          "INSERT INTO commissions_bonuses (company_id, employee_id, amount, date, description) VALUES (?, ?, 300, '2026-03-20', 'Performance Bonus - March')",
+          [compId, empId]
+        );
+      }
     }
   }
 
@@ -1470,6 +1556,41 @@ async function startServer() {
     }
   });
 
+  app.get("/api/employee/leaves", async (req, res) => {
+    let connection;
+    try {
+      const { employee_id } = req.query;
+      if (!employee_id) {
+        return res.status(400).json({ error: "employee_id is required" });
+      }
+      connection = await db.getConnection();
+      const [leaves] = await connection.query(
+        "SELECT * FROM leaves WHERE employee_id = ? ORDER BY created_at DESC",
+        [employee_id]
+      ) as [Record<string, unknown>[], unknown];
+      
+      const totalLeavesDays = leaves.filter(l => l.status === 'Approved').reduce((acc, curr) => acc + (curr.total_days as number), 0);
+      const pendingLeavesCount = leaves.filter(l => l.status === 'Pending').length;
+      const approvedLeavesCount = leaves.filter(l => l.status === 'Approved').length;
+      const leaveBalance = 20 - totalLeavesDays;
+
+      res.json({
+        leaves,
+        stats: {
+          total: leaves.length,
+          approved: approvedLeavesCount,
+          pending: pendingLeavesCount,
+          balance: leaveBalance
+        }
+      });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
   app.post("/api/employee/leaves", async (req, res) => {
     let connection;
     try {
@@ -1480,6 +1601,85 @@ async function startServer() {
         [company_id, employee_id, leave_type, start_date, end_date, reason, total_days]
       );
       res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  // Payroll APIs for Employee
+  app.get("/api/employee/salary-slips", async (req, res) => {
+    let connection;
+    try {
+      const { employee_id } = req.query;
+      if (!employee_id) return res.status(400).json({ error: "Employee ID is required" });
+      
+      connection = await db.getConnection();
+      const [slips] = await connection.query(
+        "SELECT * FROM salary_slips WHERE employee_id = ? ORDER BY year DESC, month DESC",
+        [employee_id]
+      );
+      res.json({ success: true, slips });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.get("/api/employee/loan-requests", async (req, res) => {
+    let connection;
+    try {
+      const { employee_id } = req.query;
+      if (!employee_id) return res.status(400).json({ error: "Employee ID is required" });
+      
+      connection = await db.getConnection();
+      const [requests] = await connection.query(
+        "SELECT * FROM loan_requests WHERE employee_id = ? ORDER BY created_at DESC",
+        [employee_id]
+      );
+      res.json({ success: true, requests });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.post("/api/employee/loan-requests", async (req, res) => {
+    let connection;
+    try {
+      const { company_id, employee_id, amount, reason, date } = req.body;
+      connection = await db.getConnection();
+      await connection.query(
+        "INSERT INTO loan_requests (company_id, employee_id, amount, reason, date) VALUES (?, ?, ?, ?, ?)",
+        [company_id, employee_id, amount, reason, date]
+      );
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.get("/api/employee/commissions", async (req, res) => {
+    let connection;
+    try {
+      const { employee_id } = req.query;
+      if (!employee_id) return res.status(400).json({ error: "Employee ID is required" });
+      
+      connection = await db.getConnection();
+      const [commissions] = await connection.query(
+        "SELECT * FROM commissions_bonuses WHERE employee_id = ? ORDER BY date DESC",
+        [employee_id]
+      );
+      res.json({ success: true, commissions });
     } catch (error: unknown) {
       const err = error as Error;
       res.status(500).json({ error: err.message });
@@ -1537,6 +1737,79 @@ async function startServer() {
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error saving permissions:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Company Admin Dashboard Stats
+  app.get("/api/company-admin/dashboard-stats", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      if (!company_id) {
+        return res.status(400).json({ error: "company_id is required" });
+      }
+      
+      const connection = await db.getConnection();
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Total Employees
+      const [empResult] = await connection.query(
+        "SELECT COUNT(*) as count FROM employees WHERE company_id = ? AND status = 'active'",
+        [company_id]
+      ) as [Record<string, unknown>[], unknown];
+      
+      // Present Today
+      const [presentResult] = await connection.query(
+        "SELECT COUNT(DISTINCT employee_id) as count FROM attendance WHERE company_id = ? AND date = ? AND status IN ('Present', 'On Break', 'Half Day')",
+        [company_id, today]
+      ) as [Record<string, unknown>[], unknown];
+      
+      // Pending Leaves
+      const [leaveResult] = await connection.query(
+        "SELECT COUNT(*) as count FROM leaves WHERE company_id = ? AND status = 'Pending'",
+        [company_id]
+      ) as [Record<string, unknown>[], unknown];
+      
+      // Departments Count
+      const [deptResult] = await connection.query(
+        "SELECT COUNT(*) as count FROM departments WHERE company_id = ?",
+        [company_id]
+      ) as [Record<string, unknown>[], unknown];
+
+      // Attendance Trend (Last 7 days)
+      const [trendResult] = await connection.query(`
+        SELECT date, COUNT(DISTINCT employee_id) as count 
+        FROM attendance 
+        WHERE company_id = ? AND date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        GROUP BY date
+        ORDER BY date ASC
+      `, [company_id]) as [Record<string, unknown>[], unknown];
+
+      // Recent Absentees (Employees who are not present today)
+      const [absenteeResult] = await connection.query(`
+        SELECT id, name, designation, department 
+        FROM employees 
+        WHERE company_id = ? AND status = 'active' 
+        AND id NOT IN (
+          SELECT employee_id FROM attendance WHERE company_id = ? AND date = ?
+        )
+        LIMIT 5
+      `, [company_id, company_id, today]) as [Record<string, unknown>[], unknown];
+      
+      connection.release();
+      
+      res.json({
+        totalEmployees: empResult[0].count as number,
+        presentToday: presentResult[0].count as number,
+        absentToday: Math.max(0, (empResult[0].count as number) - (presentResult[0].count as number)),
+        pendingLeaves: leaveResult[0].count as number,
+        totalDepartments: deptResult[0].count as number,
+        attendanceTrend: trendResult,
+        recentAbsentees: absenteeResult
+      });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching dashboard stats:", err);
       res.status(500).json({ error: err.message });
     }
   });

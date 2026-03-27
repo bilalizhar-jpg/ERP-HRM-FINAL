@@ -1,5 +1,7 @@
 import { FileText, Upload, Download, Trash2, Plus, Search, ShieldCheck, X } from 'lucide-react';
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import SuperAdminSidebar from '../../components/SuperAdminSidebar';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Policy {
@@ -14,6 +16,8 @@ interface Policy {
 }
 
 export default function CompanyPolicy() {
+  const location = useLocation();
+  const isSuperAdminPath = location.pathname.startsWith('/super-admin');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [policies, setPolicies] = useState<Policy[]>([]);
@@ -61,8 +65,11 @@ export default function CompanyPolicy() {
   );
 
   return (
-    <div className="p-8 bg-[#F8FAFC] min-h-full">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+    <div className="min-h-screen bg-[#f8f9fa] flex">
+      {isSuperAdminPath && <SuperAdminSidebar />}
+      
+      <main className="flex-1 p-8 bg-[#F8FAFC] min-h-full overflow-y-auto">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
             <ShieldCheck size={24} />
@@ -332,7 +339,8 @@ export default function CompanyPolicy() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

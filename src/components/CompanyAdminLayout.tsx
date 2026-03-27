@@ -5,7 +5,12 @@ import { ArrowLeft, LogOut } from 'lucide-react';
 export default function CompanyAdminLayout() {
   const navigate = useNavigate();
 
-  const handleExitToSite = () => {
+  const handleExitToSite = async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
     localStorage.removeItem('companyAdmin');
     navigate('/');
   };

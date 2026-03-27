@@ -57,7 +57,12 @@ export default function CompanyAdminSidebar() {
 
   const visibleMenuItems = menuItems.filter(item => allowedModules.includes(item.name));
 
-  const handleExitToSite = () => {
+  const handleExitToSite = async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
     localStorage.removeItem('companyAdmin');
     navigate('/');
   };

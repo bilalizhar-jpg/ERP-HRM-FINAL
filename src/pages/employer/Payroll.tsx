@@ -1,3 +1,4 @@
+import { useLocation } from 'react-router-dom';
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
 import { DynamicDashboard, WidgetConfig } from '../../components/dashboard/DynamicDashboard';
 import { DollarSign, FileText, AlertCircle, CheckCircle } from 'lucide-react';
@@ -101,9 +102,12 @@ const payrollWidgets: WidgetConfig[] = [
 ];
 
 export default function Payroll() {
+  const location = useLocation();
+  const isSuperAdminPath = location.pathname.startsWith('/super-admin');
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex">
-      <SuperAdminSidebar />
+      {isSuperAdminPath && <SuperAdminSidebar />}
       
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
         <DynamicDashboard 

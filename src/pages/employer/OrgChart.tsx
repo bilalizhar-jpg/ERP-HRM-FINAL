@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
+import SuperAdminSidebar from '../../components/SuperAdminSidebar';
 import { 
   Network, Search, ZoomIn, ZoomOut, Maximize2, ChevronDown, ChevronRight, 
   Mail, Briefcase, Building2, Download, X, Undo, Redo, Trash2, Type, 
@@ -21,7 +23,6 @@ import { CSS } from '@dnd-kit/utilities';
 
 import html2canvas from 'html2canvas';
 import { Document, Packer, Paragraph, ImageRun } from 'docx';
-// @ts-expect-error - file-saver has no types
 import { saveAs } from 'file-saver';
 
 interface EmployeeNode {
@@ -240,6 +241,8 @@ const DraggableOrgNode = ({
 };
 
 export default function OrgChart() {
+  const location = useLocation();
+  const isSuperAdminPath = location.pathname.startsWith('/super-admin');
   const [hierarchy, setHierarchy] = useState<EmployeeNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -643,8 +646,11 @@ export default function OrgChart() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#F8FAFC]">
-      {/* Header */}
+    <div className="min-h-screen bg-[#f8f9fa] flex">
+      {isSuperAdminPath && <SuperAdminSidebar />}
+      
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
       <div className="p-6 bg-white border-b border-slate-200 shrink-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -1022,6 +1028,7 @@ export default function OrgChart() {
           </div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }

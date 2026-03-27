@@ -4,19 +4,28 @@ import { ArrowLeft, Home, Lock, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function SuperAdminLogin() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // WARNING: Hardcoding credentials in client-side code is insecure.
-    // This is implemented as requested for demonstration purposes.
-    if (username === 'bilal.izhar' && password === 'Bilal@03074429879') {
-      navigate('/super-admin/dashboard');
-    } else {
-      setError('Invalid username or password');
+    setError('');
+    try {
+      const res = await fetch('/api/super-admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        navigate('/super-admin/dashboard');
+      } else {
+        setError(data.message || 'Invalid username or password');
+      }
+    } catch (err) {
+      setError('Error connecting to server');
     }
   };
 
@@ -96,10 +105,10 @@ export default function SuperAdminLogin() {
                 <User size={20} />
               </div>
               <input
-                type="text"
-                placeholder="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email"
+                placeholder="Email Address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-gray-900"
                 required
               />

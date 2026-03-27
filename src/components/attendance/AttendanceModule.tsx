@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LineChart, Line
+  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, LineChart, Line
 } from 'recharts';
 import { 
-  Clock, CheckCircle2, XCircle, AlertCircle, Download, Plus, FileSpreadsheet, FileText
+  Settings, Plus, Calendar, Search, Download, FileSpreadsheet, FileText, XCircle, ArrowRight, User, Clock, AlertCircle, TrendingUp, CalendarDays, Check, Camera
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -45,10 +45,9 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'daily' | 'monthly' | 'report'>('daily');
+  const [activeTab, setActiveTab] = useState('Attendance form');
   
   // Form State
-  const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     employee_id: '',
     date: new Date().toISOString().split('T')[0],
@@ -175,7 +174,6 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
       });
 
       if (res.ok) {
-        setShowForm(false);
         // Refresh data
         if (activeTab === 'daily') {
           fetchDailyAttendance(selectedDate);
@@ -348,24 +346,6 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
       missingDays
     };
   });
-  const totalPresent = attendanceData.filter(a => a.status === 'Present').length;
-  const totalAbsent = attendanceData.filter(a => a.status === 'Absent').length;
-  const totalLeave = attendanceData.filter(a => a.status === 'Leave').length;
-  const totalLate = attendanceData.filter(a => a.is_late).length;
-  const totalMissing = employees.length - attendanceData.length;
-
-  const pieData = [
-    { name: 'Present', value: totalPresent, color: '#10b981' },
-    { name: 'Absent', value: totalAbsent, color: '#ef4444' },
-    { name: 'Leave', value: totalLeave, color: '#f59e0b' },
-    { name: 'Not Marked', value: totalMissing, color: '#94a3b8' },
-  ].filter(d => d.value > 0);
-
-  const barData = [
-    { name: 'On Time', count: totalPresent - totalLate },
-    { name: 'Late', count: totalLate }
-  ];
-
   // Monthly Summary Calculations
   const monthlySummary = employees.map(emp => {
     const empRecords = attendanceData.filter(a => a.employee_id === emp.id);
@@ -380,293 +360,379 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       {/* Header Actions */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex bg-slate-100 p-1 rounded-xl">
-          <button 
-            onClick={() => setActiveTab('daily')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'daily' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Daily Dashboard
-          </button>
-          <button 
-            onClick={() => setActiveTab('monthly')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'monthly' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Monthly View
-          </button>
-          <button 
-            onClick={() => setActiveTab('report')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'report' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Working Hours
-          </button>
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6 bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
+        <div>
+          <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter leading-none">Attendance Protocol</h1>
+          <p className="text-[10px] text-slate-400 font-black mt-4 uppercase tracking-[0.3em]">Monitor and manage workforce presence</p>
+          
+          <div className="flex gap-2 mt-8 overflow-x-auto pb-2 scrollbar-hide">
+            {['Attendance form', 'Daily status', 'Monthly attendance', 'Working hours report', 'Missing attendance'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                  activeTab === tab 
+                    ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' 
+                    : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {activeTab === 'daily' ? (
-            <input 
-              type="date" 
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-600 outline-none"
-            />
-          ) : (
-            <input 
-              type="month" 
-              value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-600 outline-none"
-            />
-          )}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+              <Calendar size={14} className="text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+            </div>
+            {activeTab === 'daily' || activeTab === 'Attendance form' || activeTab === 'Daily status' ? (
+              <input 
+                type="date" 
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all w-full sm:w-48"
+              />
+            ) : (
+              <input 
+                type="month" 
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all w-full sm:w-48"
+              />
+            )}
+          </div>
           
           <div className="flex items-center gap-2">
             <button 
               onClick={exportToCSV}
-              className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-3 py-2 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-3 bg-white border border-slate-100 text-slate-600 px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm group"
               title="Export CSV"
             >
-              <Download size={16} />
-              <span className="hidden sm:inline">CSV</span>
+              <Download size={14} className="group-hover:-translate-y-0.5 transition-transform" />
+              CSV
             </button>
             <button 
               onClick={exportToExcel}
-              className="flex items-center gap-2 bg-white border border-slate-200 text-emerald-700 px-3 py-2 rounded-xl text-sm font-bold hover:bg-emerald-50 transition-colors"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-3 bg-white border border-slate-100 text-emerald-600 px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-all shadow-sm group"
               title="Export Excel"
             >
-              <FileSpreadsheet size={16} />
-              <span className="hidden sm:inline">Excel</span>
+              <FileSpreadsheet size={14} className="group-hover:-translate-y-0.5 transition-transform" />
+              Excel
             </button>
             <button 
               onClick={exportToPDF}
-              className="flex items-center gap-2 bg-white border border-slate-200 text-rose-700 px-3 py-2 rounded-xl text-sm font-bold hover:bg-rose-50 transition-colors"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-3 bg-white border border-slate-100 text-rose-600 px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 transition-all shadow-sm group"
               title="Export PDF"
             >
-              <FileText size={16} />
-              <span className="hidden sm:inline">PDF</span>
+              <FileText size={14} className="group-hover:-translate-y-0.5 transition-transform" />
+              PDF
             </button>
           </div>
-          <button 
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
-          >
-            <Plus size={16} />
-            Mark Attendance
-          </button>
         </div>
       </div>
 
       {/* Loading State */}
       {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="flex flex-col justify-center items-center h-96 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-blue-50 rounded-full animate-pulse"></div>
+            <div className="absolute top-0 left-0 w-16 h-16 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+          </div>
+          <p className="mt-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Synchronizing Data...</p>
         </div>
       ) : (
-        <>
-          {/* Daily Dashboard */}
-          {activeTab === 'daily' && (
-            <div className="space-y-6">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
-                    <CheckCircle2 size={24} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Present</p>
-                    <h3 className="text-2xl font-black text-slate-900">{totalPresent}</h3>
-                  </div>
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+          {/* Attendance form */}
+          {activeTab === 'Attendance form' && (
+            <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-10 border-b border-slate-50 flex justify-between items-end bg-slate-50/30">
+                <div>
+                  <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Manual Entry</h2>
+                  <p className="text-[10px] text-slate-400 font-black mt-4 uppercase tracking-[0.3em]">Log attendance records manually</p>
                 </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center">
-                    <XCircle size={24} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Absent</p>
-                    <h3 className="text-2xl font-black text-slate-900">{totalAbsent}</h3>
-                  </div>
+                <div className="flex gap-4">
+                  <button className="flex items-center gap-3 px-6 py-4 bg-white text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-100 shadow-sm">
+                    <Settings size={14} strokeWidth={3} />
+                    Configuration
+                  </button>
+                  <button className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 group">
+                    <Plus size={14} strokeWidth={4} className="group-hover:rotate-90 transition-transform" />
+                    Bulk Import
+                  </button>
                 </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
-                    <AlertCircle size={24} />
+              </div>
+
+              <div className="p-10">
+                <form onSubmit={handleSubmit} className="max-w-4xl space-y-10">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <User size={12} className="text-blue-500" />
+                        Target Employee
+                      </label>
+                      <select 
+                        name="employee_id"
+                        value={formData.employee_id}
+                        onChange={handleFormChange}
+                        required
+                        className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black uppercase tracking-tight focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all appearance-none"
+                      >
+                        <option value="">Select Employee Profile</option>
+                        {employees.map(emp => (
+                          <option key={emp.id} value={emp.id}>{emp.name} — {emp.employee_id}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <CalendarDays size={12} className="text-blue-500" />
+                        Log Date
+                      </label>
+                      <input 
+                        type="date" 
+                        name="date"
+                        value={formData.date}
+                        onChange={handleFormChange}
+                        required
+                        className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black uppercase tracking-tight focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all" 
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <Clock size={12} className="text-emerald-500" />
+                        Check-In Time
+                      </label>
+                      <input 
+                        type="time" 
+                        name="check_in"
+                        value={formData.check_in}
+                        onChange={handleFormChange}
+                        required
+                        className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black uppercase tracking-tight focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all" 
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <Clock size={12} className="text-rose-500" />
+                        Check-Out Time
+                      </label>
+                      <input 
+                        type="time" 
+                        name="check_out"
+                        value={formData.check_out}
+                        onChange={handleFormChange}
+                        required
+                        className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black uppercase tracking-tight focus:outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-500 transition-all" 
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Late</p>
-                    <h3 className="text-2xl font-black text-slate-900">{totalLate}</h3>
+
+                  <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-3 text-slate-400">
+                      <AlertCircle size={14} />
+                      <p className="text-[10px] font-black uppercase tracking-widest">Fields marked with * are mandatory for system integrity</p>
+                    </div>
+                    <button 
+                      type="submit"
+                      disabled={formLoading}
+                      className="px-12 py-5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 disabled:opacity-50 flex items-center gap-3 group"
+                    >
+                      {formLoading ? 'Processing...' : 'Commit Record'}
+                      <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
                   </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Daily status */}
+          {activeTab === 'Daily status' && (
+            <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-10 border-b border-slate-50 flex justify-between items-end bg-slate-50/30">
+                <div>
+                  <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Daily Status</h2>
+                  <p className="text-[10px] text-slate-400 font-black mt-4 uppercase tracking-[0.3em]">Real-time presence monitoring</p>
                 </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
-                    <Clock size={24} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">On Leave</p>
-                    <h3 className="text-2xl font-black text-slate-900">{totalLeave}</h3>
+                <div className="flex gap-3">
+                  <div className="relative group">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={14} />
+                    <input 
+                      type="text" 
+                      placeholder="Search Workforce..." 
+                      className="pl-12 pr-6 py-4 bg-white border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 w-72 transition-all shadow-sm" 
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-6">Attendance Status</h3>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={pieData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={80}
-                          paddingAngle={5}
-                          dataKey="value"
-                        >
-                          {pieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-6">Punctuality</h3>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={barData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                        <YAxis axisLine={false} tickLine={false} />
-                        <RechartsTooltip cursor={{fill: '#f8fafc'}} />
-                        <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-
-              {/* Daily Table */}
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-100">
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Employee</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Check In</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Check Out</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Selfie</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Late</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Hours</th>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] w-24">SL</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Employee Identity</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Login</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Logout</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Duration</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Status</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {dailyAttendanceView.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-10 py-20 text-center">
+                          <div className="flex flex-col items-center">
+                            <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center text-slate-200 mb-4">
+                              <Search size={32} />
+                            </div>
+                            <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">No records found for this date</p>
+                          </div>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {dailyAttendanceView.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-500">No employees found.</td>
-                        </tr>
-                      ) : (
-                        dailyAttendanceView.map((record) => (
-                          <tr key={record.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                            <td className="py-4 px-6">
-                              <div className="font-bold text-slate-900">{record.employee_name}</div>
-                              <div className="text-xs text-slate-500">{record.emp_code}</div>
-                            </td>
-                            <td className="py-4 px-6">
-                              <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase ${
-                                record.status === 'Present' ? 'bg-emerald-50 text-emerald-600' : 
-                                record.status === 'Absent' ? 'bg-rose-50 text-rose-600' : 
-                                record.status === 'Not Marked' ? 'bg-slate-100 text-slate-500' :
-                                'bg-amber-50 text-amber-600'
-                              }`}>
-                                {record.status}
-                              </span>
-                            </td>
-                            <td className="py-4 px-6 text-sm text-slate-600">{record.check_in || '-'}</td>
-                            <td className="py-4 px-6 text-sm text-slate-600">{record.check_out || '-'}</td>
-                            <td className="py-4 px-6">
-                              {record.selfie_url ? (
+                    ) : (
+                      dailyAttendanceView.map((record, index) => (
+                        <tr key={record.id} className="hover:bg-slate-50/30 transition-colors group">
+                          <td className="px-10 py-8 text-xs text-slate-400 font-black">{(index + 1).toString().padStart(2, '0')}</td>
+                          <td className="px-10 py-8">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 font-black text-[10px] border border-slate-100 group-hover:bg-blue-50 group-hover:text-blue-600 group-hover:border-blue-100 transition-all">
+                                {record.employee_name.split(' ').map(n => n[0]).join('')}
+                              </div>
+                              <div>
+                                <div className="text-sm font-black text-slate-900 uppercase tracking-tight">{record.employee_name}</div>
+                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{record.emp_code}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-10 py-8">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{record.check_in || '—'}</span>
+                          </td>
+                          <td className="px-10 py-8">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{record.check_out || '—'}</span>
+                          </td>
+                          <td className="px-10 py-8">
+                            <span className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200">
+                              {record.working_hours}H
+                            </span>
+                          </td>
+                          <td className="px-10 py-8">
+                            <span className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border shadow-sm ${
+                              record.status === 'Present' 
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
+                                : record.status === 'Absent'
+                                ? 'bg-rose-50 text-rose-600 border-rose-100'
+                                : 'bg-amber-50 text-amber-600 border-amber-100'
+                            }`}>
+                              {record.status}
+                            </span>
+                          </td>
+                          <td className="px-10 py-8 text-right">
+                            <div className="flex justify-end gap-2">
+                              {record.selfie_url && (
                                 <button 
-                                  onClick={() => setSelectedSelfie(record.selfie_url || null)}
-                                  className="text-blue-600 hover:text-blue-800 font-bold text-xs uppercase tracking-widest"
+                                  onClick={() => setSelectedSelfie(record.selfie_url!)}
+                                  className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all border border-blue-100 hover:border-blue-600 shadow-sm"
+                                  title="View Verification Selfie"
                                 >
-                                  View
+                                  <Camera size={14} strokeWidth={2.5} />
                                 </button>
-                              ) : (
-                                <span className="text-slate-400 text-xs">-</span>
                               )}
-                            </td>
-                            <td className="py-4 px-6">
-                              {record.is_late ? (
-                                <span className="text-rose-600 font-bold text-sm">Yes</span>
-                              ) : (
-                                <span className="text-slate-400 text-sm">-</span>
-                              )}
-                            </td>
-                            <td className="py-4 px-6 text-sm font-bold text-slate-700">{record.working_hours}h</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Monthly View */}
-          {activeTab === 'monthly' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-6 border-b border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Monthly Summary ({monthFilter})</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-100">
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Employee</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Present</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Absent</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Leaves</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Late Days</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Total Hours</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {monthlySummary.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-500">No employees found.</td>
+                              <button className="w-10 h-10 bg-white text-slate-400 rounded-xl flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all border border-slate-100 hover:border-slate-900 shadow-sm">
+                                <Settings size={14} strokeWidth={2.5} />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
-                      ) : (
-                        monthlySummary.map((summary, idx) => (
-                          <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                            <td className="py-4 px-6 font-bold text-slate-900">{summary.employee}</td>
-                            <td className="py-4 px-6 text-emerald-600 font-bold">{summary.present}</td>
-                            <td className="py-4 px-6 text-rose-600 font-bold">{summary.absent}</td>
-                            <td className="py-4 px-6 text-amber-600 font-bold">{summary.leave}</td>
-                            <td className="py-4 px-6 text-slate-600">{summary.late}</td>
-                            <td className="py-4 px-6 text-blue-600 font-bold">{summary.totalHours}h</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
 
-          {/* Working Hours Report */}
-          {activeTab === 'report' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-6">Working Hours Trend</h3>
+          {/* Monthly attendance */}
+          {activeTab === 'Monthly attendance' && (
+            <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-10 border-b border-slate-50 flex justify-between items-end bg-slate-50/30">
+                <div>
+                  <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Monthly Summary</h2>
+                  <p className="text-[10px] text-slate-400 font-black mt-4 uppercase tracking-[0.3em]">Aggregate performance for {monthFilter}</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Employee</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Present</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Absent</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Leaves</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Late Days</th>
+                      <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Total Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {monthlySummary.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-10 py-20 text-center text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">No aggregate data available</td>
+                      </tr>
+                    ) : (
+                      monthlySummary.map((summary, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/30 transition-colors group">
+                          <td className="px-10 py-8">
+                            <span className="text-sm font-black text-slate-900 uppercase tracking-tight">{summary.employee}</span>
+                          </td>
+                          <td className="px-10 py-8">
+                            <span className="text-emerald-600 font-black text-xs">{summary.present}</span>
+                          </td>
+                          <td className="px-10 py-8">
+                            <span className="text-rose-600 font-black text-xs">{summary.absent}</span>
+                          </td>
+                          <td className="px-10 py-8">
+                            <span className="text-amber-600 font-black text-xs">{summary.leave}</span>
+                          </td>
+                          <td className="px-10 py-8">
+                            <span className="text-slate-400 font-black text-xs">{summary.late}</span>
+                          </td>
+                          <td className="px-10 py-8 text-right">
+                            <span className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                              {summary.totalHours}H
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Working hours report */}
+          {activeTab === 'Working hours report' && (
+            <div className="space-y-10">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div className="lg:col-span-2 bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
+                  <div className="flex items-center justify-between mb-10">
+                    <div>
+                      <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">Hours Trend</h3>
+                      <p className="text-[10px] text-slate-400 font-black mt-2 uppercase tracking-[0.3em]">Visualizing workforce productivity</p>
+                    </div>
+                    <div className="w-10 h-10 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
+                      <TrendingUp size={18} />
+                    </div>
+                  </div>
                   <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={attendanceData.reduce((acc: { date: string; hours: number }[], curr) => {
@@ -679,74 +745,119 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
                         }
                         return acc;
                       }, []).sort((a, b) => a.date.localeCompare(b.date))}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="date" axisLine={false} tickLine={false} />
-                        <YAxis axisLine={false} tickLine={false} />
-                        <RechartsTooltip />
-                        <Line type="monotone" dataKey="hours" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, fill: '#3b82f6' }} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis 
+                          dataKey="date" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 900 }}
+                          dy={10}
+                        />
+                        <YAxis 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 900 }}
+                        />
+                        <RechartsTooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#fff', 
+                            borderRadius: '1rem', 
+                            border: '1px solid #f1f5f9',
+                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                            fontSize: '10px',
+                            fontWeight: 900,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.1em'
+                          }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="hours" 
+                          stroke="#3b82f6" 
+                          strokeWidth={4} 
+                          dot={{ r: 6, fill: '#3b82f6', strokeWidth: 3, stroke: '#fff' }} 
+                          activeDot={{ r: 8, strokeWidth: 0 }}
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
                 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-6">Month Summary</h3>
-                  <div className="space-y-4">
-                    <div className="p-4 bg-slate-50 rounded-xl flex justify-between items-center">
-                      <span className="text-sm font-bold text-slate-500 uppercase">Working Days</span>
-                      <span className="text-xl font-black text-slate-900">{workingDaysInMonth}</span>
+                <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
+                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-10 text-center">Metrics</h3>
+                  <div className="space-y-6">
+                    <div className="p-8 bg-slate-50 rounded-[2rem] border border-slate-100 group hover:bg-white hover:shadow-xl hover:shadow-slate-100 transition-all duration-500">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Working Days</span>
+                      <span className="text-5xl font-black text-slate-900 tracking-tighter">{workingDaysInMonth}</span>
                     </div>
-                    <div className="p-4 bg-blue-50 rounded-xl flex justify-between items-center">
-                      <span className="text-sm font-bold text-blue-600 uppercase">Total Logged Hours</span>
-                      <span className="text-xl font-black text-blue-700">
-                        {attendanceData.reduce((sum, r) => sum + Number(r.working_hours || 0), 0).toFixed(0)}h
-                      </span>
+                    <div className="p-8 bg-blue-50 rounded-[2rem] border border-blue-100 group hover:bg-white hover:shadow-xl hover:shadow-blue-100 transition-all duration-500">
+                      <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] block mb-2">Total Logged</span>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-5xl font-black text-blue-600 tracking-tighter">
+                          {attendanceData.reduce((sum, r) => sum + Number(r.working_hours || 0), 0).toFixed(0)}
+                        </span>
+                        <span className="text-xl font-black text-blue-400 uppercase tracking-tighter">HRS</span>
+                      </div>
                     </div>
-                    <div className="p-4 bg-amber-50 rounded-xl flex justify-between items-center">
-                      <span className="text-sm font-bold text-amber-600 uppercase">Total Overtime</span>
-                      <span className="text-xl font-black text-amber-700">
-                        {attendanceData.reduce((sum, r) => sum + Number(r.overtime_hours || 0), 0).toFixed(0)}h
-                      </span>
+                    <div className="p-8 bg-amber-50 rounded-[2rem] border border-amber-100 group hover:bg-white hover:shadow-xl hover:shadow-amber-100 transition-all duration-500">
+                      <span className="text-[10px] font-black text-amber-400 uppercase tracking-[0.2em] block mb-2">Overtime</span>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-5xl font-black text-amber-600 tracking-tighter">
+                          {attendanceData.reduce((sum, r) => sum + Number(r.overtime_hours || 0), 0).toFixed(0)}
+                        </span>
+                        <span className="text-xl font-black text-amber-400 uppercase tracking-tighter">HRS</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-6">Employee Hours Breakdown</h3>
+              <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-10 border-b border-slate-50 bg-slate-50/30">
+                  <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Breakdown</h2>
+                  <p className="text-[10px] text-slate-400 font-black mt-4 uppercase tracking-[0.3em]">Individual performance metrics</p>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-200">
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Employee</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Days Present</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Missing Days</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Total Hours</th>
-                        <th className="py-4 px-6 text-xs font-bold text-slate-400 uppercase tracking-wider">Overtime</th>
+                      <tr className="bg-slate-50/50 border-b border-slate-100">
+                        <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Employee</th>
+                        <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Days Present</th>
+                        <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Missing Days</th>
+                        <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Total Hours</th>
+                        <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Overtime</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-100">
                       {employeeHoursSummary.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-8 text-center text-slate-500">No employees found.</td>
+                          <td colSpan={5} className="px-10 py-20 text-center text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">No breakdown data available</td>
                         </tr>
                       ) : (
                         employeeHoursSummary.map((emp) => (
-                          <tr key={emp.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                            <td className="py-4 px-6">
-                              <div className="font-bold text-slate-900">{emp.name}</div>
-                              <div className="text-xs text-slate-500">{emp.code}</div>
+                          <tr key={emp.id} className="hover:bg-slate-50/30 transition-colors group">
+                            <td className="px-10 py-8">
+                              <div className="text-sm font-black text-slate-900 uppercase tracking-tight">{emp.name}</div>
+                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{emp.code}</div>
                             </td>
-                            <td className="py-4 px-6 text-sm font-bold text-emerald-600">{emp.daysPresent}</td>
-                            <td className="py-4 px-6">
+                            <td className="px-10 py-8">
+                              <span className="text-emerald-600 font-black text-xs">{emp.daysPresent}</span>
+                            </td>
+                            <td className="px-10 py-8">
                               {emp.missingDays > 0 ? (
-                                <span className="text-rose-600 font-bold text-sm bg-rose-50 px-2 py-1 rounded-md">{emp.missingDays}</span>
+                                <span className="px-3 py-1 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-black uppercase tracking-widest border border-rose-100">{emp.missingDays} Days</span>
                               ) : (
-                                <span className="text-slate-400 text-sm">0</span>
+                                <span className="text-slate-300 font-black text-xs">—</span>
                               )}
                             </td>
-                            <td className="py-4 px-6 text-sm font-bold text-slate-700">{emp.totalHours}h</td>
-                            <td className="py-4 px-6 text-sm font-bold text-amber-600">{emp.totalOvertime > "0.00" ? `${emp.totalOvertime}h` : '-'}</td>
+                            <td className="px-10 py-8">
+                              <span className="text-slate-700 font-black text-xs">{emp.totalHours}H</span>
+                            </td>
+                            <td className="px-10 py-8 text-right">
+                              <span className="px-4 py-2 bg-amber-50 text-amber-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-amber-100">
+                                {emp.totalOvertime > "0.00" ? `${emp.totalOvertime}H` : '0H'}
+                              </span>
+                            </td>
                           </tr>
                         ))
                       )}
@@ -756,138 +867,107 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
               </div>
             </div>
           )}
-        </>
-      )}
 
-      {/* Manual Entry Modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Mark Attendance</h2>
-              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">
-                <XCircle size={24} />
-              </button>
-            </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Employee</label>
-                <select 
-                  name="employee_id"
-                  value={formData.employee_id}
-                  onChange={handleFormChange}
-                  required
-                  className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-slate-900 text-sm focus:ring-2 focus:ring-blue-600 outline-none"
-                >
-                  <option value="">Select Employee</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.employee_id})</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Date</label>
-                  <input 
-                    type="date" 
-                    name="date"
-                    value={formData.date}
-                    onChange={handleFormChange}
-                    required
-                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-slate-900 text-sm focus:ring-2 focus:ring-blue-600 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Status</label>
-                  <select 
-                    name="status"
-                    value={formData.status}
-                    onChange={handleFormChange}
-                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-slate-900 text-sm focus:ring-2 focus:ring-blue-600 outline-none"
-                  >
-                    <option value="Present">Present</option>
-                    <option value="Absent">Absent</option>
-                    <option value="Leave">Leave</option>
-                    <option value="Half Day">Half Day</option>
-                  </select>
-                </div>
-              </div>
-
-              {formData.status !== 'Absent' && formData.status !== 'Leave' && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Check In</label>
-                      <input 
-                        type="time" 
-                        name="check_in"
-                        value={formData.check_in}
-                        onChange={handleFormChange}
-                        required={formData.status === 'Present'}
-                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-slate-900 text-sm focus:ring-2 focus:ring-blue-600 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Check Out</label>
-                      <input 
-                        type="time" 
-                        name="check_out"
-                        value={formData.check_out}
-                        onChange={handleFormChange}
-                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-slate-900 text-sm focus:ring-2 focus:ring-blue-600 outline-none"
-                      />
-                    </div>
+          {/* Missing attendance */}
+          {activeTab === 'Missing attendance' && (
+            <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+              {dailyAttendanceView.filter(r => r.status === 'Not Marked').length === 0 ? (
+                <div className="p-20 text-center flex flex-col items-center">
+                  <div className="w-24 h-24 bg-emerald-50 rounded-[2rem] flex items-center justify-center text-emerald-600 mb-8">
+                    <Check size={48} strokeWidth={3} />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Break Time (Minutes)</label>
-                    <input 
-                      type="number" 
-                      name="break_time"
-                      value={formData.break_time}
-                      onChange={handleFormChange}
-                      min="0"
-                      className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-slate-900 text-sm focus:ring-2 focus:ring-blue-600 outline-none"
-                    />
+                  <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-4">Perfect Compliance</h2>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">All workforce records are synchronized and up to date</p>
+                </div>
+              ) : (
+                <>
+                  <div className="p-10 border-b border-slate-50 bg-slate-50/30">
+                    <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Missing Records</h2>
+                    <p className="text-[10px] text-slate-400 font-black mt-4 uppercase tracking-[0.3em]">Workforce members with pending attendance logs</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/50 border-b border-slate-100">
+                          <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Employee Identity</th>
+                          <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Department</th>
+                          <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Designation</th>
+                          <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {dailyAttendanceView.filter(r => r.status === 'Not Marked').map((record) => {
+                          const emp = employees.find(e => e.id === record.employee_id);
+                          return (
+                            <tr key={record.id} className="hover:bg-slate-50/30 transition-colors group">
+                              <td className="px-10 py-8">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 font-black text-[10px] border border-slate-100 group-hover:bg-rose-50 group-hover:text-rose-600 group-hover:border-rose-100 transition-all">
+                                    {record.employee_name.split(' ').map(n => n[0]).join('')}
+                                  </div>
+                                  <div>
+                                    <div className="text-sm font-black text-slate-900 uppercase tracking-tight">{record.employee_name}</div>
+                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{record.emp_code}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-10 py-8">
+                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{emp?.department || '—'}</span>
+                              </td>
+                              <td className="px-10 py-8">
+                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{emp?.designation || '—'}</span>
+                              </td>
+                              <td className="px-10 py-8 text-right">
+                                <button 
+                                  onClick={() => {
+                                    setFormData(prev => ({ ...prev, employee_id: record.employee_id.toString() }));
+                                    setActiveTab('Attendance form');
+                                  }}
+                                  className="px-6 py-3 bg-rose-50 text-rose-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all border border-rose-100 hover:border-rose-600 shadow-sm"
+                                >
+                                  Mark Now
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </>
               )}
-
-              <div className="pt-4 flex justify-end gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
-                >
-                  CANCEL
-                </button>
-                <button 
-                  type="submit"
-                  disabled={formLoading}
-                  className="px-6 py-3 bg-blue-600 text-white text-sm font-black tracking-widest uppercase rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 disabled:opacity-50"
-                >
-                  {formLoading ? 'SAVING...' : 'SAVE RECORD'}
-                </button>
-              </div>
-            </form>
-          </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Selfie Modal */}
       {selectedSelfie && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[60] p-4" onClick={() => setSelectedSelfie(null)}>
-          <div className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-md w-full relative" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl flex items-center justify-center z-[100] p-4 animate-in fade-in duration-500" onClick={() => setSelectedSelfie(null)}>
+          <div className="bg-white rounded-[3rem] overflow-hidden shadow-2xl max-w-lg w-full relative animate-in zoom-in duration-500" onClick={e => e.stopPropagation()}>
             <button 
               onClick={() => setSelectedSelfie(null)}
-              className="absolute top-4 right-4 bg-white/20 hover:bg-white/40 backdrop-blur-md text-white rounded-full p-2 transition-colors z-10"
+              className="absolute top-6 right-6 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white rounded-2xl p-3 transition-all z-10 border border-white/20"
             >
               <XCircle size={24} />
             </button>
-            <img src={selectedSelfie} alt="Attendance Selfie" className="w-full h-auto" referrerPolicy="no-referrer" />
-            <div className="p-6 bg-white">
-              <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Attendance Verification</h3>
-              <p className="text-slate-500 text-sm mt-1">Selfie captured during check-in for identity verification.</p>
+            <div className="aspect-square overflow-hidden bg-slate-900">
+              <img src={selectedSelfie} alt="Attendance Selfie" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            </div>
+            <div className="p-10 bg-white">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest border border-blue-100">Verified Identity</div>
+                <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Biometric Check</div>
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Verification Protocol</h3>
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-4 leading-relaxed">Visual confirmation captured during the check-in sequence for security and audit purposes.</p>
+              
+              <button 
+                onClick={() => setSelectedSelfie(null)}
+                className="w-full mt-10 py-5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] hover:bg-slate-800 transition-all"
+              >
+                Close Verification
+              </button>
             </div>
           </div>
         </div>
