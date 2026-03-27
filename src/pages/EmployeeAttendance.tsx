@@ -47,7 +47,13 @@ export default function EmployeeAttendance() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`/api/employee/attendance/stats?employee_id=${employee.id}`);
+      const res = await fetch(`/api/employee/attendance/stats?employee_id=${employee.id}`, {
+        cache: 'no-store',
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache'
+        }
+      });
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       setAttendance(data?.dailyAttendance || []);
@@ -59,7 +65,7 @@ export default function EmployeeAttendance() {
       if (data?.dailyAttendance && data.dailyAttendance.length > 0) {
         const latestRecord = data.dailyAttendance[0];
         const todayStr = new Date().toISOString().split('T')[0];
-        const recordDateStr = new Date(latestRecord.date).toISOString().split('T')[0];
+        const recordDateStr = latestRecord.date_str || new Date(latestRecord.date).toISOString().split('T')[0];
         
         if (recordDateStr === todayStr) {
           setStatus(latestRecord.status);
@@ -133,28 +139,11 @@ export default function EmployeeAttendance() {
     setLoading(true);
     console.log(`[Attendance] Initiating ${action} for employee ${employee.id} in company ${employee.company_id}...`);
     
-    // Get fresh location for each action
-    if (!navigator.geolocation) {
-      console.warn("[Attendance] Geolocation is not supported by this browser. Using fallback location.");
-      proceedWithAction(0, 0);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        console.log(`[Attendance] Location captured: ${latitude}, ${longitude}`);
-        setLocation({ lat: latitude, lng: longitude });
-        proceedWithAction(latitude, longitude);
-      },
-      (error) => {
-        console.warn("[Attendance] Geolocation error or denied. Using fallback location.", error);
-        proceedWithAction(0, 0);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+    let locationHandled = false;
 
     async function proceedWithAction(latitude: number, longitude: number) {
+      if (locationHandled) return;
+      locationHandled = true;
       try {
         const res = await fetch('/api/employee/attendance/action', {
           method: 'POST',
@@ -198,6 +187,36 @@ export default function EmployeeAttendance() {
         setLoading(false);
       }
     }
+
+    // Get fresh location for each action
+    if (!navigator.geolocation) {
+      console.warn("[Attendance] Geolocation is not supported by this browser. Using fallback location.");
+      proceedWithAction(0, 0);
+      return;
+    }
+
+    const geoTimeout = setTimeout(() => {
+      if (!locationHandled) {
+        console.warn("[Attendance] Geolocation timed out manually. Using fallback location.");
+        proceedWithAction(0, 0);
+      }
+    }, 5000);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        clearTimeout(geoTimeout);
+        const { latitude, longitude } = position.coords;
+        console.log(`[Attendance] Location captured: ${latitude}, ${longitude}`);
+        setLocation({ lat: latitude, lng: longitude });
+        proceedWithAction(latitude, longitude);
+      },
+      (error) => {
+        clearTimeout(geoTimeout);
+        console.warn("[Attendance] Geolocation error or denied. Using fallback location.", error);
+        proceedWithAction(0, 0);
+      },
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+    );
   };
 
   return (

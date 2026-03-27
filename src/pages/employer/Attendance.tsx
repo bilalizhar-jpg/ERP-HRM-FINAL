@@ -23,6 +23,7 @@ export default function Attendance() {
     check_out?: string | null,
     working_hours: number,
     date: string,
+    date_str?: string,
     status: string
   }[]>([]);
   const [dailyFilters, setDailyFilters] = useState({ search: '', date: format(new Date(), 'yyyy-MM-dd') });
@@ -308,7 +309,7 @@ export default function Attendance() {
                           {att.check_out_time ? format(new Date(att.check_out_time), 'hh:mm a') : (att.check_out || '--:--')}
                         </td>
                         <td className="p-6 font-bold text-slate-900">{att.working_hours} H</td>
-                        <td className="p-6 font-bold text-slate-600">{format(new Date(att.date), 'dd MMM yyyy')}</td>
+                        <td className="p-6 font-bold text-slate-600">{format(new Date((att.date_str || new Date(att.date).toISOString().split('T')[0]) + 'T00:00:00'), 'dd MMM yyyy')}</td>
                         <td className="p-6">
                           <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
                             att.status === 'Present' ? 'bg-emerald-50 text-emerald-600' : 

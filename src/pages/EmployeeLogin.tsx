@@ -16,8 +16,8 @@ export default function EmployeeLogin() {
     }
   }, [navigate]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (e?: React.FormEvent, retryCount = 0) => {
+    if (e) e.preventDefault();
     setLoading(true);
     try {
       const res = await fetch('/api/employee/login', {
@@ -31,6 +31,11 @@ export default function EmployeeLogin() {
       try {
         data = JSON.parse(text);
       } catch {
+        if (text.includes("Rate exceeded") && retryCount < 3) {
+          console.warn(`Rate exceeded, retrying in ${1000 * (retryCount + 1)}ms...`);
+          setTimeout(() => handleLogin(undefined, retryCount + 1), 1000 * (retryCount + 1));
+          return;
+        }
         throw new Error(text || res.statusText);
       }
 
@@ -40,12 +45,16 @@ export default function EmployeeLogin() {
         navigate('/employee/dashboard');
       } else {
         alert(data.message || "Invalid credentials");
+        setLoading(false);
       }
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Login error:", err);
-      alert(err.message || "Error logging in");
-    } finally {
+      if (err.message.includes("Rate exceeded")) {
+        alert("Too many login attempts. Please wait a moment and try again.");
+      } else {
+        alert(err.message || "Error logging in");
+      }
       setLoading(false);
     }
   };

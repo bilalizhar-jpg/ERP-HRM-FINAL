@@ -1253,7 +1253,7 @@ async function startServer() {
       const now = new Date();
 
       const [existing] = await connection.query(
-        "SELECT * FROM attendance WHERE employee_id = ? AND date = ? ORDER BY created_at DESC LIMIT 1",
+        "SELECT * FROM attendance WHERE employee_id = ? AND date = ? ORDER BY id DESC LIMIT 1",
         [employee_id, date]
       ) as [AttendanceRecord[], unknown];
 
@@ -1273,13 +1273,13 @@ async function startServer() {
           return res.status(400).json({ error: "No active check-in found" });
         }
         const record = existing[0];
-        const checkIn = new Date(record.check_in_time!);
+        const checkIn = record.check_in_time ? new Date(record.check_in_time) : new Date();
         const breakStart = record.break_start_time ? new Date(record.break_start_time) : null;
-        const breakEnd = record.break_end_time ? new Date(record.break_end_time) : null;
         
         let breakDuration = record.break_duration_minutes || 0;
-        let finalBreakEnd = breakEnd;
-        if (breakStart && !breakEnd) {
+        let finalBreakEnd = record.break_end_time ? new Date(record.break_end_time) : null;
+        
+        if (record.status === 'On Break' && breakStart) {
           // If still on break, end it now
           breakDuration += Math.round((now.getTime() - breakStart.getTime()) / 60000);
           finalBreakEnd = now;
@@ -1290,8 +1290,8 @@ async function startServer() {
         const workingHours = Math.max(0, (totalDurationMinutes - breakDuration) / 60);
         
         await connection.query(
-          "UPDATE attendance SET check_out_time = ?, check_out_lat = ?, check_out_long = ?, status = 'Checked-Out', working_hours = ?, break_duration_minutes = ?, break_end_time = COALESCE(?, break_end_time) WHERE id = ?",
-          [now, lat, long, workingHours.toFixed(2), breakDuration, finalBreakEnd, record.id]
+          "UPDATE attendance SET check_out_time = ?, check_out_lat = ?, check_out_long = ?, status = 'Checked-Out', working_hours = ?, break_duration_minutes = ?, break_end_time = ? WHERE id = ?",
+          [now, lat, long, workingHours.toFixed(2), breakDuration, finalBreakEnd || record.break_end_time, record.id]
         );
       } else if (action === 'break-start') {
         if (existing.length === 0 || existing[0].status !== 'Present') {
@@ -1309,7 +1309,7 @@ async function startServer() {
           additionalBreak = Math.round((now.getTime() - breakStart.getTime()) / 60000);
         }
         await connection.query(
-          "UPDATE attendance SET break_end_time = ?, status = 'Present', break_duration_minutes = break_duration_minutes + ? WHERE id = ?", 
+          "UPDATE attendance SET break_end_time = ?, status = 'Present', break_duration_minutes = COALESCE(break_duration_minutes, 0) + ? WHERE id = ?", 
           [now, additionalBreak, record.id]
         );
       }
@@ -1333,7 +1333,7 @@ async function startServer() {
       }
       connection = await db.getConnection();
       const [rows] = await connection.query(
-        "SELECT * FROM attendance WHERE employee_id = ? AND date >= DATE_SUB(NOW(), INTERVAL 30 DAY) ORDER BY created_at DESC",
+        "SELECT *, DATE_FORMAT(date, '%Y-%m-%d') as date_str FROM attendance WHERE employee_id = ? AND date >= DATE_SUB(NOW(), INTERVAL 30 DAY) ORDER BY id DESC",
         [employee_id]
       ) as [AttendanceRecord[], unknown];
       
@@ -1343,7 +1343,7 @@ async function startServer() {
       const todayStr = now.toISOString().split('T')[0];
       
       const dailyHours = data
-        .filter(r => new Date(r.date).toISOString().split('T')[0] === todayStr)
+        .filter(r => (r as AttendanceRecord & { date_str: string }).date_str === todayStr)
         .reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);
       
       const oneWeekAgo = new Date();
@@ -1446,29 +1446,31 @@ async function startServer() {
       
       const now = new Date();
       const todayStr = now.toISOString().split('T')[0];
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      // Format startOfMonth properly avoiding timezone shifts
+      const startOfMonthStr = `${startOfMonth.getFullYear()}-${String(startOfMonth.getMonth() + 1).padStart(2, '0')}-01`;
       
       // Today's attendance
       const [todayAttendance] = await connection.query(
-        "SELECT * FROM attendance WHERE employee_id = ? AND date = ? ORDER BY created_at DESC",
+        "SELECT *, DATE_FORMAT(date, '%Y-%m-%d') as date_str FROM attendance WHERE employee_id = ? AND date = ? ORDER BY id DESC",
         [employee_id, todayStr]
       ) as [AttendanceRecord[], unknown];
       
       // Monthly attendance
       const [monthlyAttendance] = await connection.query(
-        "SELECT * FROM attendance WHERE employee_id = ? AND date >= ? ORDER BY date DESC",
-        [employee_id, startOfMonth]
+        "SELECT *, DATE_FORMAT(date, '%Y-%m-%d') as date_str FROM attendance WHERE employee_id = ? AND date >= ? ORDER BY date DESC, id DESC",
+        [employee_id, startOfMonthStr]
       ) as [AttendanceRecord[], unknown];
       
       // Leaves
       const [leaves] = await connection.query(
-        "SELECT * FROM leaves WHERE employee_id = ? ORDER BY created_at DESC",
+        "SELECT *, DATE_FORMAT(start_date, '%Y-%m-%d') as start_date_str, DATE_FORMAT(end_date, '%Y-%m-%d') as end_date_str FROM leaves WHERE employee_id = ? ORDER BY created_at DESC",
         [employee_id]
       ) as [Record<string, unknown>[], unknown];
       
       // Notes
       const [notes] = await connection.query(
-        "SELECT * FROM notes WHERE employee_id = ? ORDER BY date DESC",
+        "SELECT *, DATE_FORMAT(date, '%Y-%m-%d') as date_str FROM notes WHERE employee_id = ? ORDER BY date DESC",
         [employee_id]
       ) as [Record<string, unknown>[], unknown];
 
@@ -1835,7 +1837,7 @@ async function startServer() {
       
       const connection = await db.getConnection();
       let query = `
-        SELECT a.*, e.name as employee_name 
+        SELECT a.*, DATE_FORMAT(a.date, '%Y-%m-%d') as date_str, e.name as employee_name 
         FROM attendance a 
         JOIN employees e ON a.employee_id = e.id 
         WHERE a.company_id = ?

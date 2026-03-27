@@ -15,6 +15,7 @@ import { useTimeTracking } from '../contexts/TimeTrackingContext';
 interface AttendanceRecord {
   id: number;
   date: string;
+  date_str?: string;
   check_in_time: string | null;
   check_out_time: string | null;
   check_in?: string | null;
@@ -28,7 +29,9 @@ interface LeaveRecord {
   id: number;
   leave_type: string;
   start_date: string;
+  start_date_str?: string;
   end_date: string;
+  end_date_str?: string;
   reason: string;
   status: string;
   total_days: number;
@@ -39,6 +42,7 @@ interface NoteRecord {
   title: string;
   content: string;
   date: string;
+  date_str?: string;
 }
 
 interface DashboardStats {
@@ -99,7 +103,13 @@ export default function EmployeeDashboard() {
   const fetchDashboardData = useCallback(async () => {
     if (!employee.id) return;
     try {
-      const res = await fetch(`/api/employee/dashboard/stats?employee_id=${employee.id}&company_id=${employee.company_id}`);
+      const res = await fetch(`/api/employee/dashboard/stats?employee_id=${employee.id}&company_id=${employee.company_id}`, {
+        cache: 'no-store',
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache'
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -425,7 +435,7 @@ export default function EmployeeDashboard() {
                       <td className="px-8 py-4 text-sm font-bold text-slate-600 border-b border-slate-50">{idx + 1}</td>
                       <td className="px-8 py-4 text-sm font-bold text-slate-900 border-b border-slate-50">{leave.leave_type}</td>
                       <td className="px-8 py-4 text-sm font-bold text-slate-600 border-b border-slate-50">
-                        {format(new Date(leave.start_date), 'dd MMM yy')} - {format(new Date(leave.end_date), 'dd MMM yy')}
+                        {format(new Date((leave.start_date_str || new Date(leave.start_date).toISOString().split('T')[0]) + 'T00:00:00'), 'dd MMM yy')} - {format(new Date((leave.end_date_str || new Date(leave.end_date).toISOString().split('T')[0]) + 'T00:00:00'), 'dd MMM yy')}
                       </td>
                       <td className="px-8 py-4 border-b border-slate-50">
                         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
@@ -476,7 +486,9 @@ export default function EmployeeDashboard() {
                   stats?.attendanceList.slice(0, 5).map((att, idx) => (
                     <tr key={att.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-8 py-4 text-sm font-bold text-slate-600 border-b border-slate-50">{idx + 1}</td>
-                      <td className="px-8 py-4 text-sm font-bold text-slate-900 border-b border-slate-50">{format(new Date(att.date), 'MMMM d, yyyy')}</td>
+                      <td className="px-8 py-4 text-sm font-bold text-slate-900 border-b border-slate-50">
+                        {format(new Date((att.date_str || new Date(att.date).toISOString().split('T')[0]) + 'T00:00:00'), 'MMMM d, yyyy')}
+                      </td>
                       <td className="px-8 py-4 text-sm font-bold text-slate-600 border-b border-slate-50">
                         {att.check_in_time ? format(new Date(att.check_in_time), 'h:mm a') : (att.check_in || '--:--')}
                       </td>
@@ -520,7 +532,8 @@ export default function EmployeeDashboard() {
               </div>
             ))}
             {calendarDays().map((day, idx) => {
-              const att = stats?.attendanceList.find(a => isSameDay(new Date(a.date), day));
+              const dayStr = format(day, 'yyyy-MM-dd');
+              const att = stats?.attendanceList.find(a => a.date_str === dayStr || new Date(a.date).toISOString().split('T')[0] === dayStr);
               const isCurrentMonth = isSameMonth(day, currentDate);
               const isToday = isSameDay(day, new Date());
 
@@ -576,7 +589,7 @@ export default function EmployeeDashboard() {
                 <div key={note.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-blue-200 transition-all group relative">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight pr-12">{note.title}</h4>
-                    <span className="text-[10px] font-bold text-slate-400">{format(new Date(note.date), 'MMM d')}</span>
+                    <span className="text-[10px] font-bold text-slate-400">{format(new Date((note.date_str || new Date(note.date).toISOString().split('T')[0]) + 'T00:00:00'), 'MMM d')}</span>
                   </div>
                   <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{note.content}</p>
                   
