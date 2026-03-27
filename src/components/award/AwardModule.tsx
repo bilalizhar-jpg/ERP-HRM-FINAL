@@ -4,135 +4,45 @@ import {
   Search, 
   FileSpreadsheet, 
   FileText, 
-  ChevronLeft, 
-  ChevronRight, 
-  X, 
-  Loader2, 
-  Trash2 
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-interface Award {
-  id: number;
-  name: string;
-  description: string;
-  gift: string;
-  date: string;
-  employee_id: number;
-  employee_name: string;
-  award_by: string;
-}
-
-interface Employee {
-  id: number;
-  name: string;
-}
-
 export default function AwardModule() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [awards, setAwards] = useState<Award[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [awards, setAwards] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    gift: '',
-    date: new Date().toISOString().split('T')[0],
-    employee_id: '',
-    award_by: ''
-  });
+  useEffect(() => {
+    fetchAwards();
+    fetchEmployees();
+  }, []);
 
   const fetchAwards = async () => {
     try {
-      const res = await fetch('/api/awards');
-      if (res.ok) {
-        const data = await res.json();
-        setAwards(data);
-      }
+      const response = await fetch('/api/awards?company_id=1');
+      const data = await response.json();
+      setAwards(data);
     } catch (error) {
-      console.error("Error fetching awards:", error);
+      console.error('Error fetching awards:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch('/api/employees');
-      if (res.ok) {
-        const data = await res.json();
-        setEmployees(data);
-      }
+      const response = await fetch('/api/employees?company_id=1');
+      const data = await response.json();
+      setEmployees(data);
     } catch (error) {
-      console.error("Error fetching employees:", error);
+      console.error('Error fetching employees:', error);
     }
   };
-
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      await Promise.all([fetchAwards(), fetchEmployees()]);
-      setLoading(false);
-    };
-    init();
-  }, []);
-
-  const handleSave = async () => {
-    if (!formData.name || !formData.gift || !formData.date || !formData.employee_id || !formData.award_by) {
-      alert("Please fill all required fields");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const res = await fetch('/api/awards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-
-      if (res.ok) {
-        await fetchAwards();
-        setIsModalOpen(false);
-        setFormData({
-          name: '',
-          description: '',
-          gift: '',
-          date: new Date().toISOString().split('T')[0],
-          employee_id: '',
-          award_by: ''
-        });
-      } else {
-        alert("Failed to save award");
-      }
-    } catch (error) {
-      console.error("Error saving award:", error);
-      alert("An error occurred");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this award?")) return;
-
-    try {
-      const res = await fetch(`/api/awards/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        await fetchAwards();
-      } else {
-        alert("Failed to delete award");
-      }
-    } catch (error) {
-      console.error("Error deleting award:", error);
-    }
-  };
-
-  const filteredAwards = awards.filter(a => 
-    a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    a.employee_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
     <div className="space-y-8">
@@ -174,8 +84,6 @@ export default function AwardModule() {
               <input 
                 type="text" 
                 placeholder="Search..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-64" 
               />
             </div>
@@ -200,12 +108,10 @@ export default function AwardModule() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="p-12 text-center">
-                    <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
-                  </td>
+                  <td colSpan={8} className="p-12 text-center text-slate-400 font-bold">Loading...</td>
                 </tr>
-              ) : filteredAwards.length > 0 ? (
-                filteredAwards.map((award, index) => (
+              ) : awards.length > 0 ? (
+                awards.map((award, index) => (
                   <tr key={award.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-6 font-bold text-slate-600">{index + 1}</td>
                     <td className="p-6 font-black text-slate-900">{award.name}</td>
@@ -215,18 +121,13 @@ export default function AwardModule() {
                         {award.gift}
                       </span>
                     </td>
-                    <td className="p-6 text-slate-600 font-bold">{new Date(award.date).toLocaleDateString()}</td>
+                    <td className="p-6 text-slate-600 font-bold">{award.date}</td>
                     <td className="p-6 font-black text-slate-900">{award.employee_name}</td>
                     <td className="p-6 text-slate-600">{award.award_by}</td>
                     <td className="p-6">
-                      <div className="flex items-center gap-2">
-                        <button 
-                          onClick={() => handleDelete(award.id)}
-                          className="p-2 hover:bg-rose-50 rounded-lg transition-colors text-slate-400 hover:text-rose-600"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                      <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-600">
+                        <MoreVertical size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -242,7 +143,7 @@ export default function AwardModule() {
         {/* Pagination */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-8">
           <p className="text-xs font-bold text-slate-500">
-            Showing 1 to {filteredAwards.length} of {filteredAwards.length} entries
+            Showing 1 to {awards.length} of {awards.length} entries
           </p>
           <div className="flex items-center gap-2">
             <button className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:bg-slate-50 transition-colors">
@@ -294,8 +195,6 @@ export default function AwardModule() {
                     <input 
                       type="text" 
                       placeholder="Award name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                     />
                   </div>
@@ -307,8 +206,6 @@ export default function AwardModule() {
                     <textarea 
                       placeholder="Award description"
                       rows={3}
-                      value={formData.description}
-                      onChange={(e) => setFormData({...formData, description: e.target.value})}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
                     />
                   </div>
@@ -320,8 +217,6 @@ export default function AwardModule() {
                     <input 
                       type="text" 
                       placeholder="Gift item"
-                      value={formData.gift}
-                      onChange={(e) => setFormData({...formData, gift: e.target.value})}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                     />
                   </div>
@@ -333,8 +228,6 @@ export default function AwardModule() {
                       </label>
                       <input 
                         type="date" 
-                        value={formData.date}
-                        onChange={(e) => setFormData({...formData, date: e.target.value})}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                       />
                     </div>
@@ -342,11 +235,7 @@ export default function AwardModule() {
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
                         Employee name <span className="text-red-500">*</span>
                       </label>
-                      <select 
-                        value={formData.employee_id}
-                        onChange={(e) => setFormData({...formData, employee_id: e.target.value})}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none"
-                      >
+                      <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none">
                         <option value="">Select Employee</option>
                         {employees.map(emp => (
                           <option key={emp.id} value={emp.id}>{emp.name}</option>
@@ -362,8 +251,6 @@ export default function AwardModule() {
                     <input 
                       type="text" 
                       placeholder="Award by"
-                      value={formData.award_by}
-                      onChange={(e) => setFormData({...formData, award_by: e.target.value})}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                     />
                   </div>
@@ -378,12 +265,9 @@ export default function AwardModule() {
                   Close
                 </button>
                 <button 
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-8 py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center gap-2"
+                  className="px-8 py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
                 >
-                  {saving && <Loader2 size={16} className="animate-spin" />}
-                  {saving ? 'Saving...' : 'Save'}
+                  Save
                 </button>
               </div>
             </motion.div>

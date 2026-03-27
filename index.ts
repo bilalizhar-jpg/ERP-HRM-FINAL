@@ -579,6 +579,23 @@ async function startServer() {
       )
     `);
 
+    // Create awards table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS awards (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        gift VARCHAR(255),
+        date DATE,
+        employee_id INT NOT NULL,
+        award_by VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
     // Insert default super admin if not exists
     const [existingAdmins] = await connection.query("SELECT * FROM admins WHERE email = 'admin@erp.com'") as [Record<string, unknown>[], unknown];
     if (existingAdmins.length === 0) {
@@ -714,6 +731,37 @@ async function startServer() {
       const err = error as Error;
       console.error("Error deleting employee:", err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Awards API
+  app.get("/api/awards", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      const connection = await db.getConnection();
+      const [rows] = await connection.query(
+        "SELECT a.*, e.name as employee_name FROM awards a JOIN employees e ON a.employee_id = e.id WHERE a.company_id = ? ORDER BY a.created_at DESC",
+        [company_id]
+      );
+      connection.release();
+      res.json(rows);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/awards", async (req, res) => {
+    try {
+      const { company_id, name, description, gift, date, employee_id, award_by } = req.body;
+      const connection = await db.getConnection();
+      await connection.query(
+        "INSERT INTO awards (company_id, name, description, gift, date, employee_id, award_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [company_id, name, description, gift, date, employee_id, award_by]
+      );
+      connection.release();
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -2945,10 +2993,12 @@ async function startServer() {
   } else {
     const distPath = path.resolve(__dirname); 
     console.log(`Serving static files from: ${distPath}`);
+    console.log(`Checking for index.html at: ${path.resolve(distPath, 'index.html')}`);
     app.use(express.static(distPath));
     
     app.get('*all', (req, res) => {
       const indexPath = path.resolve(distPath, 'index.html');
+      console.log(`Sending file: ${indexPath}`);
       res.sendFile(indexPath, (err) => {
         if (err) {
           console.error(`Error sending index.html: ${err.message}`);
