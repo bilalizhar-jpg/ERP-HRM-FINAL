@@ -157,6 +157,7 @@ async function startServer() {
         status ENUM('active', 'inactive', 'suspended') DEFAULT 'active',
         license_status ENUM('valid', 'expired') DEFAULT 'valid',
         gmail_tokens TEXT,
+        smtp_settings TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -165,7 +166,17 @@ async function startServer() {
     try {
       await connection.query("ALTER TABLE companies ADD COLUMN plan VARCHAR(50) DEFAULT 'Basic'");
     } catch {
-      // Column might already exist, ignore error
+      // Column might already exist
+    }
+    try {
+      await connection.query("ALTER TABLE companies ADD COLUMN gmail_tokens TEXT");
+    } catch {
+      // Column might already exist
+    }
+    try {
+      await connection.query("ALTER TABLE companies ADD COLUMN smtp_settings TEXT");
+    } catch {
+      // Column might already exist
     }
 
     // Create invoices table
@@ -1267,9 +1278,11 @@ async function startServer() {
         const breakEnd = record.break_end_time ? new Date(record.break_end_time) : null;
         
         let breakDuration = record.break_duration_minutes || 0;
+        let finalBreakEnd = breakEnd;
         if (breakStart && !breakEnd) {
           // If still on break, end it now
           breakDuration += Math.round((now.getTime() - breakStart.getTime()) / 60000);
+          finalBreakEnd = now;
         }
         
         const totalDurationMs = now.getTime() - checkIn.getTime();
@@ -1277,8 +1290,8 @@ async function startServer() {
         const workingHours = Math.max(0, (totalDurationMinutes - breakDuration) / 60);
         
         await connection.query(
-          "UPDATE attendance SET check_out_time = ?, check_out_lat = ?, check_out_long = ?, status = 'Checked-Out', working_hours = ?, break_duration_minutes = ? WHERE id = ?",
-          [now, lat, long, workingHours.toFixed(2), breakDuration, record.id]
+          "UPDATE attendance SET check_out_time = ?, check_out_lat = ?, check_out_long = ?, status = 'Checked-Out', working_hours = ?, break_duration_minutes = ?, break_end_time = COALESCE(?, break_end_time) WHERE id = ?",
+          [now, lat, long, workingHours.toFixed(2), breakDuration, finalBreakEnd, record.id]
         );
       } else if (action === 'break-start') {
         if (existing.length === 0 || existing[0].status !== 'Present') {
@@ -1330,7 +1343,7 @@ async function startServer() {
       const todayStr = now.toISOString().split('T')[0];
       
       const dailyHours = data
-        .filter(r => r.date.toString().includes(todayStr))
+        .filter(r => new Date(r.date).toISOString().split('T')[0] === todayStr)
         .reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);
       
       const oneWeekAgo = new Date();
@@ -1474,15 +1487,15 @@ async function startServer() {
 
       res.json({
         today: {
-          punchIn: todayAttendance.length > 0 ? [...todayAttendance].sort((a, b) => new Date(a.check_in_time).getTime() - new Date(b.check_in_time).getTime())[0].check_in_time : null,
+          punchIn: todayAttendance.length > 0 ? [...todayAttendance].sort((a, b) => new Date(a.check_in_time!).getTime() - new Date(b.check_in_time!).getTime())[0].check_in_time : null,
           punchOut: todayAttendance.length > 0 ? [...todayAttendance].sort((a, b) => new Date(b.check_out_time || 0).getTime() - new Date(a.check_out_time || 0).getTime())[0].check_out_time : null,
           workedTime: workedTimeToday,
           breakTime: breakTimeToday / 60,
-          scheduled: 9, // Example scheduled hours
+          scheduled: 9, // Standard 9 hours
           leftTime: Math.max(0, 9 - workedTimeToday)
         },
         monthly: {
-          scheduled: 22 * 9, // Example monthly scheduled hours
+          scheduled: 22 * 9, // Standard 22 days * 9 hours
           workedTime: monthlyWorkedTime,
           overtime: monthlyOvertime,
           breakTime: monthlyBreakTime / 60,
@@ -1810,6 +1823,143 @@ async function startServer() {
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching dashboard stats:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Employer Attendance Daily Status
+  app.get("/api/employer/attendance/daily", async (req, res) => {
+    try {
+      const { company_id, date, search } = req.query;
+      if (!company_id) return res.status(400).json({ error: "company_id is required" });
+      
+      const connection = await db.getConnection();
+      let query = `
+        SELECT a.*, e.name as employee_name 
+        FROM attendance a 
+        JOIN employees e ON a.employee_id = e.id 
+        WHERE a.company_id = ?
+      `;
+      const params: (string | number | string[] | undefined)[] = [company_id as string];
+      
+      if (date) {
+        query += " AND a.date = ?";
+        params.push(date as string);
+      }
+      
+      if (search) {
+        query += " AND e.name LIKE ?";
+        params.push(`%${search}%`);
+      }
+      
+      query += " ORDER BY a.date DESC, a.check_in_time DESC";
+      
+      const [results] = await connection.query(query, params) as [Record<string, unknown>[], unknown];
+      connection.release();
+      res.json(results);
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Employer Attendance Monthly Report
+  app.get("/api/employer/attendance/monthly", async (req, res) => {
+    try {
+      const { company_id, month, search } = req.query;
+      if (!company_id) return res.status(400).json({ error: "company_id is required" });
+      
+      const connection = await db.getConnection();
+      let query = `
+        SELECT 
+          e.id as employee_id,
+          e.name as employee_name,
+          COUNT(DISTINCT a.date) as total_days,
+          SUM(CASE WHEN a.status IN ('Present', 'Half Day', 'On Break') THEN 1 ELSE 0 END) as present_days,
+          SUM(CASE WHEN a.status = 'Absent' THEN 1 ELSE 0 END) as absent_days,
+          SUM(CASE WHEN a.status = 'Leave' THEN 1 ELSE 0 END) as leave_days,
+          SUM(a.working_hours) as total_hours
+        FROM employees e
+        LEFT JOIN attendance a ON e.id = a.employee_id
+      `;
+      const params: (string | number | string[] | undefined)[] = [company_id as string];
+      
+      query += " WHERE e.company_id = ?";
+      
+      if (month) {
+        query += " AND DATE_FORMAT(a.date, '%Y-%m') = ?";
+        params.push(month as string);
+      }
+      
+      if (search) {
+        query += " AND e.name LIKE ?";
+        params.push(`%${search}%`);
+      }
+      
+      query += " GROUP BY e.id, e.name";
+      
+      const [results] = await connection.query(query, params) as [Record<string, unknown>[], unknown];
+      connection.release();
+      res.json(results);
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Employer Attendance Working Hours Report
+  app.get("/api/employer/attendance/working-hours", async (req, res) => {
+    try {
+      const { company_id, employee_id, date, month } = req.query;
+      if (!company_id) return res.status(400).json({ error: "company_id is required" });
+      
+      const connection = await db.getConnection();
+      
+      // Trend Data (Last 7 days)
+      const [trendResult] = await connection.query(`
+        SELECT 
+          DATE_FORMAT(date, '%a') as name,
+          SUM(working_hours) as hours
+        FROM attendance
+        WHERE company_id = ? AND date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        GROUP BY date
+        ORDER BY date ASC
+      `, [company_id]) as [Record<string, unknown>[], unknown];
+
+      // Stats
+      let statsQuery = `
+        SELECT 
+          SUM(working_hours) as total_hours,
+          AVG(working_hours) as avg_hours,
+          SUM(overtime_hours) as overtime_hours
+        FROM attendance
+        WHERE company_id = ?
+      `;
+      const statsParams: (string | number | string[] | undefined)[] = [company_id as string];
+
+      if (employee_id && employee_id !== 'All Employees') {
+        statsQuery += " AND employee_id = ?";
+        statsParams.push(employee_id as string);
+      }
+
+      if (date) {
+        statsQuery += " AND date = ?";
+        statsParams.push(date as string);
+      } else if (month) {
+        statsQuery += " AND DATE_FORMAT(date, '%Y-%m') = ?";
+        statsParams.push(month as string);
+      }
+
+      const [statsResult] = await connection.query(statsQuery, statsParams) as [Record<string, unknown>[], unknown];
+      
+      connection.release();
+      
+      res.json({
+        trend: trendResult,
+        stats: statsResult[0] || { total_hours: 0, avg_hours: 0, overtime_hours: 0 }
+      });
+    } catch (error: unknown) {
+      const err = error as Error;
       res.status(500).json({ error: err.message });
     }
   });
@@ -2354,7 +2504,7 @@ async function startServer() {
   // WhatsApp Routes
   app.get("/api/whatsapp/status", async (req, res) => {
     const { companyId } = req.query;
-    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+    if (companyId === undefined || companyId === null) return res.status(400).json({ error: "Company ID required" });
 
     try {
       const connection = await db.getConnection();
@@ -2376,7 +2526,7 @@ async function startServer() {
   app.post("/api/whatsapp/connect", async (req, res) => {
     const { companyId } = req.body;
     console.log(`[WhatsApp] Connect request received for company ${companyId}`);
-    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+    if (companyId === undefined || companyId === null) return res.status(400).json({ error: "Company ID required" });
 
     try {
       await initWhatsApp(Number(companyId));
@@ -2388,7 +2538,7 @@ async function startServer() {
 
   app.post("/api/whatsapp/disconnect", async (req, res) => {
     const { companyId } = req.body;
-    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+    if (companyId === undefined || companyId === null) return res.status(400).json({ error: "Company ID required" });
 
     try {
       const sock = sessions.get(Number(companyId));
@@ -2419,7 +2569,7 @@ async function startServer() {
   app.post("/api/whatsapp/send", async (req, res) => {
     const { company_id, to_number, message } = req.body;
     console.log(`[WhatsApp] Send request received for company ${company_id} to ${to_number}`);
-    if (!company_id || !to_number || !message) {
+    if (company_id === undefined || company_id === null || !to_number || !message) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -2505,6 +2655,11 @@ async function startServer() {
       client.redirectUri = `${protocol}://${host}/api/gmail/callback`;
     }
 
+    const state = JSON.stringify({ 
+      companyId: companyId ? String(companyId) : undefined,
+      source: req.query.source || 'super-admin'
+    });
+
     const url = client.generateAuthUrl({
       access_type: "offline",
       scope: [
@@ -2513,13 +2668,26 @@ async function startServer() {
         "openid"
       ],
       prompt: "consent",
-      state: companyId ? String(companyId) : undefined
+      state
     });
     res.json({ url });
   });
 
   app.get("/api/gmail/callback", async (req, res) => {
-    const { code, state: companyId } = req.query;
+    const { code, state } = req.query;
+    let companyId: string | undefined;
+    let source = 'super-admin';
+
+    if (state) {
+      try {
+        const parsedState = JSON.parse(state as string);
+        companyId = parsedState.companyId;
+        source = parsedState.source;
+      } catch {
+        companyId = state as string;
+      }
+    }
+
     const client = getOAuth2Client();
     
     if (!client) {
@@ -2554,7 +2722,12 @@ async function startServer() {
       connection.release();
       
       // Redirect back to the appropriate page
-      const redirectPath = companyId ? '/super-admin/companies' : '/super-admin/gmail';
+      let redirectPath = '/super-admin/gmail';
+      if (source === 'employer') {
+        redirectPath = '/company-admin/settings/gmail';
+      } else if (companyId) {
+        redirectPath = '/super-admin/companies';
+      }
       
       res.send(`
         <html>
@@ -2674,6 +2847,87 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       console.error("Gmail Send Error:", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // SMTP Settings Endpoints
+  app.get("/api/smtp/settings", async (req, res) => {
+    try {
+      const companyId = req.query.companyId as string;
+      const connection = await db.getConnection();
+      
+      if (companyId === 'global') {
+        const [rows] = await connection.query("SELECT setting_value FROM settings WHERE setting_key = 'smtp_config'") as [Record<string, unknown>[], unknown];
+        connection.release();
+        if (rows.length > 0) {
+          res.json(JSON.parse(rows[0].setting_value as string));
+        } else {
+          res.json(null);
+        }
+      } else {
+        const [rows] = await connection.query("SELECT smtp_settings FROM companies WHERE id = ?", [companyId]) as [Record<string, unknown>[], unknown];
+        connection.release();
+        if (rows.length > 0 && rows[0].smtp_settings) {
+          res.json(JSON.parse(rows[0].smtp_settings as string));
+        } else {
+          res.json(null);
+        }
+      }
+    } catch (error: unknown) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/smtp/settings", async (req, res) => {
+    try {
+      const { companyId, settings } = req.body;
+      const connection = await db.getConnection();
+      
+      if (companyId === 'global') {
+        await connection.query(
+          "INSERT INTO settings (setting_key, setting_value) VALUES ('smtp_config', ?) ON DUPLICATE KEY UPDATE setting_value = ?",
+          [JSON.stringify(settings), JSON.stringify(settings)]
+        );
+      } else {
+        await connection.query(
+          "UPDATE companies SET smtp_settings = ? WHERE id = ?",
+          [JSON.stringify(settings), companyId]
+        );
+      }
+      
+      connection.release();
+      res.json({ success: true });
+    } catch (error: unknown) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/smtp/send-test", async (req, res) => {
+    try {
+      const { host, port, user, password, encryption, fromEmail, fromName } = req.body;
+      
+      const transporter = nodemailer.createTransport({
+        host,
+        port: parseInt(port),
+        secure: encryption === 'ssl',
+        auth: {
+          user,
+          pass: password,
+        },
+        tls: encryption === 'tls' ? { rejectUnauthorized: false } : undefined
+      });
+
+      await transporter.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        to: user, // Send to self for testing
+        subject: "SMTP Integration Test",
+        text: "This is a test email from your ERP SMTP integration.",
+        html: "<b>This is a test email from your ERP SMTP integration.</b>",
+      });
+
+      res.json({ success: true });
+    } catch (error: unknown) {
       res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
     }
   });

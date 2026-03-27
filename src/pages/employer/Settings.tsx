@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
+import CompanyAdminSidebar from '../../components/CompanyAdminSidebar';
 import { Upload } from 'lucide-react';
+import EmployerGmailIntegration from './EmployerGmailIntegration';
+import EmployerWhatsAppIntegration from './EmployerWhatsAppIntegration';
 
 export default function Settings() {
   const location = useLocation();
@@ -244,18 +247,20 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex">
-      {isSuperAdminPath && <SuperAdminSidebar />}
+      {isSuperAdminPath ? <SuperAdminSidebar /> : <CompanyAdminSidebar />}
       
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
-        <header className="mb-12">
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">Settings</h1>
-          <p className="text-slate-500 font-medium">Configure global application settings and business rules.</p>
-        </header>
+        {!location.pathname.includes('/gmail') && !location.pathname.includes('/whatsapp') && (
+          <header className="mb-12">
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">Settings</h1>
+            <p className="text-slate-500 font-medium">Configure global application settings and business rules.</p>
+          </header>
+        )}
 
         <Routes>
           <Route path="general" element={<GeneralSettingsContent />} />
-          <Route path="gmail" element={<div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 text-center"><h2 className="text-xl font-black uppercase tracking-tight mb-4">Gmail Integration</h2><p className="text-slate-500">Connect your corporate Gmail account to sync emails and communications.</p></div>} />
-          <Route path="whatsapp" element={<div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 text-center"><h2 className="text-xl font-black uppercase tracking-tight mb-4">WhatsApp Integration</h2><p className="text-slate-500">Enable WhatsApp notifications and messaging for your employees.</p></div>} />
+          <Route path="gmail" element={<EmployerGmailIntegration />} />
+          <Route path="whatsapp" element={<EmployerWhatsAppIntegration />} />
           <Route path="rules" element={<div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 text-center"><h2 className="text-xl font-black uppercase tracking-tight mb-4">Business Rules</h2><p className="text-slate-500">Configure custom business logic and operational constraints.</p></div>} />
           <Route path="roles-permissions" element={<div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 text-center"><h2 className="text-xl font-black uppercase tracking-tight mb-4">Roles & Permissions</h2><p className="text-slate-500">Define user roles and manage access levels across the platform.</p></div>} />
           <Route path="menu-permissions" element={<div className="bg-white p-12 rounded-3xl shadow-sm border border-slate-100 text-center"><h2 className="text-xl font-black uppercase tracking-tight mb-4">Menu Permissions</h2><p className="text-slate-500">Control sidebar menu visibility for different user roles.</p></div>} />

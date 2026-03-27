@@ -19,9 +19,23 @@ export default function GmailIntegration() {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [emailsSentToday, setEmailsSentToday] = useState(0);
   const [isSendingTest, setIsSendingTest] = useState(false);
+  const [isSendingSmtpTest, setIsSendingSmtpTest] = useState(false);
+  const [isSavingSmtp, setIsSavingSmtp] = useState(false);
+
+  // SMTP State
+  const [smtpSettings, setSmtpSettings] = useState({
+    host: '',
+    port: '587',
+    user: '',
+    password: '',
+    encryption: 'tls', // 'none', 'ssl', 'tls'
+    fromEmail: '',
+    fromName: 'ERP System'
+  });
 
   useEffect(() => {
     fetchStatus();
+    fetchSmtpSettings('global');
   }, []);
 
   const fetchStatus = async () => {
@@ -33,6 +47,76 @@ export default function GmailIntegration() {
       setEmailsSentToday(data.sentToday || 0);
     } catch {
       setStatus('disconnected');
+    }
+  };
+
+  const fetchSmtpSettings = async (companyId: string) => {
+    try {
+      const res = await fetch(`/api/smtp/settings?companyId=${companyId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          setSmtpSettings(data);
+        } else {
+          setSmtpSettings({
+            host: '',
+            port: '587',
+            user: '',
+            password: '',
+            encryption: 'tls',
+            fromEmail: '',
+            fromName: 'ERP System'
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching SMTP settings:", error);
+    }
+  };
+
+  const handleSaveSmtp = async () => {
+    setIsSavingSmtp(true);
+    try {
+      const res = await fetch('/api/smtp/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: 'global',
+          settings: smtpSettings
+        })
+      });
+      if (res.ok) {
+        alert('SMTP settings saved successfully!');
+      } else {
+        alert('Failed to save SMTP settings');
+      }
+    } catch (error) {
+      console.error("Error saving SMTP settings:", error);
+      alert('Error saving SMTP settings');
+    } finally {
+      setIsSavingSmtp(false);
+    }
+  };
+
+  const handleSendSmtpTest = async () => {
+    setIsSendingSmtpTest(true);
+    try {
+      const res = await fetch('/api/smtp/send-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(smtpSettings)
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('SMTP test email sent successfully!');
+      } else {
+        alert('Failed to send SMTP test email: ' + data.message);
+      }
+    } catch (error) {
+      console.error("Error sending SMTP test email:", error);
+      alert('Error sending SMTP test email');
+    } finally {
+      setIsSendingSmtpTest(false);
     }
   };
 
@@ -208,8 +292,105 @@ export default function GmailIntegration() {
             </div>
 
             {/* Features Card */}
-            <div className="lg:col-span-2">
-              <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 h-full">
+            <div className="lg:col-span-2 space-y-8">
+              {/* SMTP Settings Card */}
+              <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">SMTP Settings</h2>
+                    <p className="text-slate-500 text-sm font-medium">Configure custom SMTP server for system-wide communications.</p>
+                  </div>
+                  <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
+                    <Send size={24} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SMTP Host</label>
+                    <input 
+                      type="text" 
+                      placeholder="smtp.example.com"
+                      value={smtpSettings.host}
+                      onChange={(e) => setSmtpSettings({...smtpSettings, host: e.target.value})}
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all uppercase"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SMTP Port</label>
+                    <input 
+                      type="text" 
+                      placeholder="587"
+                      value={smtpSettings.port}
+                      onChange={(e) => setSmtpSettings({...smtpSettings, port: e.target.value})}
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all uppercase"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SMTP Username</label>
+                    <input 
+                      type="text" 
+                      placeholder="user@example.com"
+                      value={smtpSettings.user}
+                      onChange={(e) => setSmtpSettings({...smtpSettings, user: e.target.value})}
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all uppercase"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SMTP Password</label>
+                    <input 
+                      type="password" 
+                      placeholder="••••••••"
+                      value={smtpSettings.password}
+                      onChange={(e) => setSmtpSettings({...smtpSettings, password: e.target.value})}
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all uppercase"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Encryption</label>
+                    <select 
+                      value={smtpSettings.encryption}
+                      onChange={(e) => setSmtpSettings({...smtpSettings, encryption: e.target.value})}
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all uppercase appearance-none"
+                    >
+                      <option value="none">None</option>
+                      <option value="ssl">SSL</option>
+                      <option value="tls">TLS</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">From Email</label>
+                    <input 
+                      type="email" 
+                      placeholder="noreply@example.com"
+                      value={smtpSettings.fromEmail}
+                      onChange={(e) => setSmtpSettings({...smtpSettings, fromEmail: e.target.value})}
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-8 flex flex-col md:flex-row gap-4">
+                  <button 
+                    onClick={handleSaveSmtp}
+                    disabled={isSavingSmtp}
+                    className="flex-1 flex items-center justify-center gap-2 py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 disabled:opacity-50"
+                  >
+                    {isSavingSmtp ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                    Save SMTP Settings
+                  </button>
+                  <button 
+                    onClick={handleSendSmtpTest}
+                    disabled={isSendingSmtpTest}
+                    className="flex-1 flex items-center justify-center gap-2 py-4 bg-slate-50 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all disabled:opacity-50"
+                  >
+                    {isSendingSmtpTest ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />}
+                    Test SMTP Connection
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100">
                 <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">System Features</h2>
                 <p className="text-slate-500 text-sm font-medium mb-8">The following system modules will utilize the Gmail protocol once connected.</p>
 

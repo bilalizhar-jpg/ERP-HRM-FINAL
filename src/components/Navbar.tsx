@@ -36,7 +36,7 @@ export default function Navbar() {
                 <span>|</span>
                 <Link to="/company-admin" className="text-slate-600 hover:text-blue-600 font-medium">Admin Employer</Link>
                 <span>|</span>
-                <Link to="/employee" className="text-slate-600 hover:text-blue-600 font-medium">Employee</Link>
+                <Link to="/employee/login" className="text-slate-600 hover:text-blue-600 font-medium">Employee</Link>
               </div>
             </div>
             <div className="flex items-center space-x-4">

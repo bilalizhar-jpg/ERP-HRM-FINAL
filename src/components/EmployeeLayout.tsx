@@ -1,14 +1,19 @@
-import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { Outlet, Link, useNavigate, Navigate } from 'react-router-dom';
 import EmployeeSidebar from './EmployeeSidebar';
 import { ArrowLeft, LogOut } from 'lucide-react';
 import { TimeTrackingProvider } from '../contexts/TimeTrackingContext';
 
 export default function EmployeeLayout() {
   const navigate = useNavigate();
+  const employeeData = localStorage.getItem('employee');
+
+  if (!employeeData) {
+    return <Navigate to="/employee/login" replace />;
+  }
 
   const handleLogout = () => {
     localStorage.removeItem('employee');
-    navigate('/employee/login');
+    navigate('/');
   };
   return (
     <TimeTrackingProvider>

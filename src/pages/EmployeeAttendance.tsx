@@ -57,7 +57,17 @@ export default function EmployeeAttendance() {
         monthlyHours: data.monthlyHours || 0
       });
       if (data?.dailyAttendance && data.dailyAttendance.length > 0) {
-        setStatus(data.dailyAttendance[0].status);
+        const latestRecord = data.dailyAttendance[0];
+        const todayStr = new Date().toISOString().split('T')[0];
+        const recordDateStr = new Date(latestRecord.date).toISOString().split('T')[0];
+        
+        if (recordDateStr === todayStr) {
+          setStatus(latestRecord.status);
+        } else {
+          setStatus('Checked-Out');
+        }
+      } else {
+        setStatus('Checked-Out');
       }
     } catch (error) {
       console.error("Error fetching stats:", error);
@@ -69,10 +79,12 @@ export default function EmployeeAttendance() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     
     // Get initial location
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => console.error("Initial location error", err)
-    );
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => console.warn("Initial location error", err)
+      );
+    }
 
     return () => clearInterval(timer);
   }, [fetchStats]);
@@ -122,11 +134,27 @@ export default function EmployeeAttendance() {
     console.log(`[Attendance] Initiating ${action} for employee ${employee.id} in company ${employee.company_id}...`);
     
     // Get fresh location for each action
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      const { latitude, longitude } = position.coords;
-      console.log(`[Attendance] Location captured: ${latitude}, ${longitude}`);
-      setLocation({ lat: latitude, lng: longitude });
-      
+    if (!navigator.geolocation) {
+      console.warn("[Attendance] Geolocation is not supported by this browser. Using fallback location.");
+      proceedWithAction(0, 0);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        console.log(`[Attendance] Location captured: ${latitude}, ${longitude}`);
+        setLocation({ lat: latitude, lng: longitude });
+        proceedWithAction(latitude, longitude);
+      },
+      (error) => {
+        console.warn("[Attendance] Geolocation error or denied. Using fallback location.", error);
+        proceedWithAction(0, 0);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+
+    async function proceedWithAction(latitude: number, longitude: number) {
       try {
         const res = await fetch('/api/employee/attendance/action', {
           method: 'POST',
@@ -169,11 +197,7 @@ export default function EmployeeAttendance() {
       } finally {
         setLoading(false);
       }
-    }, (error) => {
-      console.error("[Attendance] Geolocation error:", error);
-      alert("Geolocation is required for attendance actions. Please enable location access.");
-      setLoading(false);
-    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+    }
   };
 
   return (

@@ -14,43 +14,23 @@ import {
 } from 'lucide-react';
 import SuperAdminSidebar from '../components/SuperAdminSidebar';
 
-interface Company {
-  id: number;
-  name: string;
-  gmail_tokens: string | null;
-}
-
 interface WhatsAppStatus {
   status: 'connected' | 'disconnected' | 'connecting';
   qr: string | null;
 }
 
 export default function WhatsAppIntegration() {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [status, setStatus] = useState<WhatsAppStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [testNumber, setTestNumber] = useState('');
   const [testMessage, setTestMessage] = useState('Hello from ERP Platform!');
   const [isSending, setIsSending] = useState(false);
 
-  const fetchCompanies = async () => {
-    try {
-      const res = await fetch('/api/companies');
-      if (res.ok) {
-        const data = await res.json();
-        setCompanies(data);
-        if (data.length > 0) setSelectedCompany(data[0]);
-      }
-    } catch (error) {
-      console.error("Error fetching companies", error);
-    }
-  };
+  const SUPER_ADMIN_ID = 0;
 
   const fetchStatus = useCallback(async () => {
-    if (!selectedCompany) return;
     try {
-      const res = await fetch(`/api/whatsapp/status?companyId=${selectedCompany.id}`);
+      const res = await fetch(`/api/whatsapp/status?companyId=${SUPER_ADMIN_ID}`);
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
@@ -58,32 +38,21 @@ export default function WhatsAppIntegration() {
     } catch (error) {
       console.error("Error fetching status", error);
     }
-  }, [selectedCompany]);
-
-  useEffect(() => {
-    fetchCompanies();
   }, []);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (selectedCompany) {
-      fetchStatus();
-      interval = setInterval(fetchStatus, 5000);
-    }
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, [selectedCompany, fetchStatus]);
+  }, [fetchStatus]);
 
   const handleConnect = async () => {
-    if (!selectedCompany) {
-      alert('Please select a company first.');
-      return;
-    }
     setLoading(true);
     try {
       const res = await fetch('/api/whatsapp/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId: selectedCompany.id })
+        body: JSON.stringify({ companyId: SUPER_ADMIN_ID })
       });
       if (res.ok) {
         fetchStatus();
@@ -100,14 +69,13 @@ export default function WhatsAppIntegration() {
   };
 
   const handleDisconnect = async () => {
-    if (!selectedCompany) return;
     if (!confirm('Are you sure you want to disconnect WhatsApp?')) return;
     setLoading(true);
     try {
       const res = await fetch('/api/whatsapp/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId: selectedCompany.id })
+        body: JSON.stringify({ companyId: SUPER_ADMIN_ID })
       });
       if (res.ok) {
         fetchStatus();
@@ -120,14 +88,14 @@ export default function WhatsAppIntegration() {
   };
 
   const handleSendTest = async () => {
-    if (!selectedCompany || !testNumber || !testMessage) return;
+    if (!testNumber || !testMessage) return;
     setIsSending(true);
     try {
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          company_id: selectedCompany.id,
+          company_id: SUPER_ADMIN_ID,
           to_number: testNumber,
           message: testMessage
         })
@@ -156,18 +124,9 @@ export default function WhatsAppIntegration() {
         <header className="flex items-center justify-between mb-12">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">WHATSAPP INTEGRATION</h1>
-            <p className="text-slate-400 font-bold tracking-widest text-xs uppercase">MULTI-TENANT COMMUNICATION PROTOCOL</p>
+            <p className="text-slate-400 font-bold tracking-widest text-xs uppercase">SYSTEM COMMUNICATION PROTOCOL</p>
           </div>
           <div className="flex items-center gap-4">
-            <select 
-              className="bg-white border-none rounded-xl px-6 py-3 text-slate-900 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-600 transition-all appearance-none cursor-pointer"
-              value={selectedCompany?.id || ''}
-              onChange={(e) => setSelectedCompany(companies.find(c => c.id === Number(e.target.value)) || null)}
-            >
-              {companies.map(company => (
-                <option key={company.id} value={company.id}>{company.name}</option>
-              ))}
-            </select>
             <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm border border-slate-100">
               <Search size={20} />
             </div>
@@ -217,7 +176,7 @@ export default function WhatsAppIntegration() {
               <div className="grid grid-cols-2 gap-6 mb-10">
                 <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">CURRENT COMPANY</p>
-                  <p className="text-lg font-black text-slate-900 uppercase">{selectedCompany?.name || '---'}</p>
+                  <p className="text-lg font-black text-slate-900 uppercase">Super Admin</p>
                 </div>
                 <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">MESSAGES SENT TODAY</p>

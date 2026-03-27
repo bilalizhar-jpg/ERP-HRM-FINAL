@@ -17,6 +17,8 @@ interface AttendanceRecord {
   date: string;
   check_in_time: string | null;
   check_out_time: string | null;
+  check_in?: string | null;
+  check_out?: string | null;
   break_duration_minutes: number;
   status: string;
   is_late: boolean;
@@ -476,10 +478,10 @@ export default function EmployeeDashboard() {
                       <td className="px-8 py-4 text-sm font-bold text-slate-600 border-b border-slate-50">{idx + 1}</td>
                       <td className="px-8 py-4 text-sm font-bold text-slate-900 border-b border-slate-50">{format(new Date(att.date), 'MMMM d, yyyy')}</td>
                       <td className="px-8 py-4 text-sm font-bold text-slate-600 border-b border-slate-50">
-                        {att.check_in_time ? format(new Date(att.check_in_time), 'h:mm a') : '--:--'}
+                        {att.check_in_time ? format(new Date(att.check_in_time), 'h:mm a') : (att.check_in || '--:--')}
                       </td>
                       <td className="px-8 py-4 text-sm font-bold text-slate-600 border-b border-slate-50">
-                        {att.check_out_time ? format(new Date(att.check_out_time), 'h:mm a') : '--:--'}
+                        {att.check_out_time ? format(new Date(att.check_out_time), 'h:mm a') : (att.check_out || '--:--')}
                       </td>
                       <td className="px-8 py-4 text-sm font-bold text-slate-600 border-b border-slate-50">
                         {att.break_duration_minutes > 0 ? `${att.break_duration_minutes} min` : 'No Break'}
@@ -539,7 +541,7 @@ export default function EmployeeDashboard() {
                   {att && (
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 p-2 bg-slate-900 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                       <p className="font-bold">{att.status}</p>
-                      <p className="opacity-70">In: {att.check_in_time ? format(new Date(att.check_in_time), 'h:mm a') : '--'}</p>
+                      <p className="opacity-70">In: {att.check_in_time ? format(new Date(att.check_in_time), 'h:mm a') : (att.check_in || '--')}</p>
                     </div>
                   )}
                 </div>

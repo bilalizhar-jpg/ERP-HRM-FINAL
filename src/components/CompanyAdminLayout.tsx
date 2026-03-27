@@ -1,16 +1,16 @@
-import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { Outlet, Link, useNavigate, Navigate } from 'react-router-dom';
 import CompanyAdminSidebar from './CompanyAdminSidebar';
 import { ArrowLeft, LogOut } from 'lucide-react';
 
 export default function CompanyAdminLayout() {
   const navigate = useNavigate();
+  const companyAdminData = localStorage.getItem('companyAdmin');
 
-  const handleExitToSite = async () => {
-    try {
-      await fetch('/api/logout', { method: 'POST' });
-    } catch (err) {
-      console.error("Logout error:", err);
-    }
+  if (!companyAdminData) {
+    return <Navigate to="/company-admin" replace />;
+  }
+
+  const handleExitToSite = () => {
     localStorage.removeItem('companyAdmin');
     navigate('/');
   };

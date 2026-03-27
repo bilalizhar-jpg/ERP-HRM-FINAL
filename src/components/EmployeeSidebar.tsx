@@ -16,7 +16,7 @@ export default function EmployeeSidebar() {
 
   const handleLogout = () => {
     localStorage.removeItem('employee');
-    navigate('/employee/login');
+    navigate('/');
   };
 
   const menuItems = [

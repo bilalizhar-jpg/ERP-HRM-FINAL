@@ -164,6 +164,15 @@ function App() {
           <Route path="shifts" element={<Shifts />} />
           <Route path="performance" element={<Performance />} />
           <Route path="recruitment" element={<Recruitment />} />
+          <Route path="recruitment/jobs-list" element={<JobsList />} />
+          <Route path="recruitment/job-posting" element={<PostJob />} />
+          <Route path="recruitment/view-posted-jobs" element={<Recruitment />} />
+          <Route path="recruitment/search-candidates" element={<Recruitment />} />
+          <Route path="recruitment/bulk-cv-upload" element={<Recruitment />} />
+          <Route path="recruitment/offer-letters" element={<Recruitment />} />
+          <Route path="recruitment/agreements" element={<Recruitment />} />
+          <Route path="recruitment/career-page" element={<Recruitment />} />
+          <Route path="recruitment/view-live-page" element={<Recruitment />} />
           <Route path="onboarding" element={<Onboarding />} />
           <Route path="offboarding" element={<Offboarding />} />
           <Route path="training" element={<Training />} />
