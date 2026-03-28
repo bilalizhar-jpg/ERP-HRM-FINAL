@@ -35,6 +35,17 @@ export default function EmployerWhatsAppIntegration() {
   const [isActive, setIsActive] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
+  // Employee Welcome Settings State
+  const [welcomeMessageTemplate, setWelcomeMessageTemplate] = useState('Dear {{employee_name}},\nWelcome to the company.\n\nYour login details are:\nUsername: {{username}}\nPassword: {{password}}\n\nPlease login and update your password.\n\nThank you');
+  const [isWelcomeActive, setIsWelcomeActive] = useState(false);
+  const [isSavingWelcomeSettings, setIsSavingWelcomeSettings] = useState(false);
+
+  // Idle Alert Settings State
+  const [idleMinutes, setIdleMinutes] = useState(5);
+  const [idleMessageTemplate, setIdleMessageTemplate] = useState('Dear {{employee_name}}, you have been inactive for {{idle_minutes}} minutes. Please resume your work.');
+  const [isIdleActive, setIsIdleActive] = useState(false);
+  const [isSavingIdleSettings, setIsSavingIdleSettings] = useState(false);
+
   useEffect(() => {
     const companyAdmin = localStorage.getItem('companyAdmin');
     if (companyAdmin) {
@@ -76,15 +87,103 @@ export default function EmployerWhatsAppIntegration() {
     }
   }, [companyId]);
 
+  const fetchWelcomeSettings = useCallback(async () => {
+    if (!companyId) return;
+    try {
+      const res = await fetch(`/api/whatsapp/employee-welcome-settings?companyId=${companyId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          setWelcomeMessageTemplate(data.message_template || 'Dear {{employee_name}},\nWelcome to the company.\n\nYour login details are:\nUsername: {{username}}\nPassword: {{password}}\n\nPlease login and update your password.\n\nThank you');
+          setIsWelcomeActive(Boolean(data.is_active));
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching welcome settings", error);
+    }
+  }, [companyId]);
+
+  const fetchIdleSettings = useCallback(async () => {
+    if (!companyId) return;
+    try {
+      const res = await fetch(`/api/whatsapp/idle-alert-settings?companyId=${companyId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          setIdleMinutes(data.idle_minutes || 5);
+          setIdleMessageTemplate(data.message_template || 'Dear {{employee_name}}, you have been inactive for {{idle_minutes}} minutes. Please resume your work.');
+          setIsIdleActive(Boolean(data.is_active));
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching idle settings", error);
+    }
+  }, [companyId]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (companyId) {
       fetchStatus();
       fetchAttendanceSettings();
+      fetchWelcomeSettings();
+      fetchIdleSettings();
       interval = setInterval(fetchStatus, 5000);
     }
     return () => clearInterval(interval);
-  }, [companyId, fetchStatus, fetchAttendanceSettings]);
+  }, [companyId, fetchStatus, fetchAttendanceSettings, fetchWelcomeSettings, fetchIdleSettings]);
+
+  const handleSaveWelcomeSettings = async () => {
+    if (!companyId) return;
+    setIsSavingWelcomeSettings(true);
+    try {
+      const res = await fetch('/api/whatsapp/employee-welcome-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: companyId,
+          is_active: isWelcomeActive,
+          message_template: welcomeMessageTemplate
+        })
+      });
+      if (res.ok) {
+        alert('Welcome message settings saved successfully!');
+      } else {
+        alert('Failed to save welcome settings');
+      }
+    } catch (error) {
+      console.error("Error saving welcome settings", error);
+      alert('Error saving welcome settings');
+    } finally {
+      setIsSavingWelcomeSettings(false);
+    }
+  };
+
+  const handleSaveIdleSettings = async () => {
+    if (!companyId) return;
+    setIsSavingIdleSettings(true);
+    try {
+      const res = await fetch('/api/whatsapp/idle-alert-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: companyId,
+          is_active: isIdleActive,
+          idle_minutes: idleMinutes,
+          message_template: idleMessageTemplate
+        })
+      });
+      if (res.ok) {
+        alert('Idle alert settings saved successfully!');
+      } else {
+        alert('Failed to save idle alert settings');
+      }
+    } catch (error) {
+      console.error("Error saving idle alert settings", error);
+      alert('Error saving idle alert settings');
+    } finally {
+      setIsSavingIdleSettings(false);
+    }
+  };
 
   const handleSaveSettings = async () => {
     if (!companyId) return;
@@ -378,6 +477,95 @@ export default function EmployerWhatsAppIntegration() {
                 className="w-full py-5 bg-blue-600 text-white font-black text-sm tracking-widest uppercase rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2"
               >
                 {isSavingSettings ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={20} /> SAVE ALERT RULES</>}
+              </button>
+            </div>
+          </div>
+
+          {/* Welcome Message Settings Card */}
+          <div className="bg-white rounded-[2.5rem] p-10 shadow-xl border border-slate-100">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">NEW EMPLOYEE WELCOME</h2>
+              <label className="flex items-center cursor-pointer">
+                <div className="relative">
+                  <input type="checkbox" className="sr-only" checked={isWelcomeActive} onChange={(e) => setIsWelcomeActive(e.target.checked)} />
+                  <div className={`block w-14 h-8 rounded-full transition-colors ${isWelcomeActive ? 'bg-emerald-500' : 'bg-slate-200'}`}></div>
+                  <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isWelcomeActive ? 'transform translate-x-6' : ''}`}></div>
+                </div>
+                <div className="ml-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {isWelcomeActive ? 'ACTIVE' : 'DISABLED'}
+                </div>
+              </label>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">MESSAGE TEMPLATE</label>
+                <textarea 
+                  value={welcomeMessageTemplate}
+                  onChange={(e) => setWelcomeMessageTemplate(e.target.value)}
+                  rows={6}
+                  className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all resize-none"
+                />
+                <p className="text-[10px] text-slate-400 ml-4">Available variables: <span className="font-bold text-blue-600">{"{{employee_name}}"}</span>, <span className="font-bold text-blue-600">{"{{username}}"}</span>, <span className="font-bold text-blue-600">{"{{password}}"}</span></p>
+              </div>
+
+              <button 
+                onClick={handleSaveWelcomeSettings}
+                disabled={isSavingWelcomeSettings}
+                className="w-full py-5 bg-blue-600 text-white font-black text-sm tracking-widest uppercase rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2"
+              >
+                {isSavingWelcomeSettings ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={20} /> SAVE WELCOME SETTINGS</>}
+              </button>
+            </div>
+          </div>
+
+          {/* Idle Alert Settings Card */}
+          <div className="bg-white rounded-[2.5rem] p-10 shadow-xl border border-slate-100">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">IDLE ALERT RULES</h2>
+              <label className="flex items-center cursor-pointer">
+                <div className="relative">
+                  <input type="checkbox" className="sr-only" checked={isIdleActive} onChange={(e) => setIsIdleActive(e.target.checked)} />
+                  <div className={`block w-14 h-8 rounded-full transition-colors ${isIdleActive ? 'bg-emerald-500' : 'bg-slate-200'}`}></div>
+                  <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isIdleActive ? 'transform translate-x-6' : ''}`}></div>
+                </div>
+                <div className="ml-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {isIdleActive ? 'ACTIVE' : 'DISABLED'}
+                </div>
+              </label>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">IDLE THRESHOLD</label>
+                <select
+                  value={idleMinutes}
+                  onChange={(e) => setIdleMinutes(Number(e.target.value))}
+                  className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all"
+                >
+                  <option value={5}>5 Minutes</option>
+                  <option value={10}>10 Minutes</option>
+                  <option value={15}>15 Minutes</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">MESSAGE TEMPLATE</label>
+                <textarea 
+                  value={idleMessageTemplate}
+                  onChange={(e) => setIdleMessageTemplate(e.target.value)}
+                  rows={3}
+                  className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all resize-none"
+                />
+                <p className="text-[10px] text-slate-400 ml-4">Available variables: <span className="font-bold text-blue-600">{"{{employee_name}}"}</span>, <span className="font-bold text-blue-600">{"{{idle_minutes}}"}</span></p>
+              </div>
+
+              <button 
+                onClick={handleSaveIdleSettings}
+                disabled={isSavingIdleSettings}
+                className="w-full py-5 bg-blue-600 text-white font-black text-sm tracking-widest uppercase rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2"
+              >
+                {isSavingIdleSettings ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={20} /> SAVE IDLE ALERT RULES</>}
               </button>
             </div>
           </div>

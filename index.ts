@@ -474,6 +474,12 @@ async function startServer() {
     try {
       await connection.query("ALTER TABLE employees ADD CONSTRAINT fk_manager FOREIGN KEY (manager_id) REFERENCES employees(id) ON DELETE SET NULL");
     } catch { /* Ignore if constraint exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD COLUMN shift_id INT");
+    } catch { /* Ignore if column exists */ }
+    try {
+      await connection.query("ALTER TABLE employees ADD CONSTRAINT fk_emp_shift FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL");
+    } catch { /* Ignore if constraint exists */ }
     
     // Create attendance table
     await connection.query(`
@@ -747,6 +753,42 @@ async function startServer() {
       )
     `);
 
+    // Create employee_welcome_settings table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS employee_welcome_settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        is_active BOOLEAN DEFAULT FALSE,
+        message_template TEXT,
+        UNIQUE KEY (company_id),
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create idle_alert_settings table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS idle_alert_settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        idle_minutes INT DEFAULT 5,
+        message_template TEXT,
+        is_active BOOLEAN DEFAULT FALSE,
+        UNIQUE KEY (company_id),
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create time_tracking table (assumed by user, creating if not exists)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS time_tracking (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        last_activity_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY (employee_id),
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
     // Create whatsapp_logs table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS whatsapp_logs (
@@ -859,7 +901,39 @@ async function startServer() {
         [company_id, name, email, passwordToStore, employee_id, department, designation, status || 'active', mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields ? JSON.stringify(custom_fields) : null]
       );
       
-      res.json({ success: true, id: (result as { insertId: number }).insertId });
+      const insertId = (result as { insertId: number }).insertId;
+      
+      // Send WhatsApp Welcome Message
+      try {
+        const [welcomeSettings] = await connection.query(
+          "SELECT * FROM employee_welcome_settings WHERE company_id = ? AND is_active = TRUE",
+          [company_id]
+        ) as [any[], any];
+
+        if (welcomeSettings.length > 0 && mobile_no) {
+          const setting = welcomeSettings[0];
+          const template = setting.message_template || "Dear {{employee_name}},\nWelcome to the company.\n\nYour login details are:\nUsername: {{username}}\nPassword: {{password}}\n\nPlease login and update your password.\n\nThank you";
+          
+          let message = template.replace(/{{employee_name}}/g, name || '');
+          message = message.replace(/{{username}}/g, username || '');
+          message = message.replace(/{{password}}/g, passwordToStore);
+
+          // Use fetch to call our own API to handle rate limiting and Baileys logic
+          fetch(`http://127.0.0.1:3000/api/whatsapp/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              company_id,
+              to_number: mobile_no,
+              message
+            })
+          }).catch(err => console.error("[WhatsApp] Failed to trigger welcome message:", err));
+        }
+      } catch (waErr) {
+        console.error("[WhatsApp] Error processing welcome message:", waErr);
+      }
+
+      res.json({ success: true, id: insertId });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error creating employee:", err);
@@ -1734,8 +1808,7 @@ async function startServer() {
           // If no shift assigned, try to find the first active shift for the company
           if (!shiftStartTime) {
              const [activeShifts] = await connection.query(
-               "SELECT start_time, grace_period FROM shifts WHERE company_id = ? AND status = 'Active' LIMIT 1",
-               [company_id]
+               "SELECT start_time, grace_period FROM shifts WHERE status = 'Active' LIMIT 1"
              ) as [Record<string, unknown>[], unknown];
              if (activeShifts.length > 0) {
                shiftStartTime = activeShifts[0].start_time;
@@ -1964,6 +2037,19 @@ async function startServer() {
     }
   });
 
+  app.get("/api/debug/schema", async (req, res) => {
+    let connection;
+    try {
+      connection = await db.getConnection();
+      const [rows] = await connection.query("DESCRIBE shifts");
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
   app.get("/api/employee/dashboard/stats", async (req, res) => {
     let connection;
     try {
@@ -2026,10 +2112,9 @@ async function startServer() {
       if (empRows.length > 0 && empRows[0].shift_id) {
         shiftInfo = empRows[0] as Record<string, unknown>;
       } else {
-        // Try to find first active shift for company
+        // Try to find first active shift
         const [activeShifts] = await connection.query(
-          "SELECT * FROM shifts WHERE company_id = ? AND status = 'Active' LIMIT 1",
-          [company_id]
+          "SELECT * FROM shifts WHERE status = 'Active' LIMIT 1"
         ) as [Record<string, unknown>[], unknown];
         if (activeShifts.length > 0) {
           shiftInfo = activeShifts[0] as Record<string, unknown>;
@@ -3263,6 +3348,124 @@ async function startServer() {
     }
   });
 
+  app.get("/api/whatsapp/employee-welcome-settings", async (req, res) => {
+    const { companyId } = req.query;
+    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+
+    let connection;
+    try {
+      connection = await db.getConnection();
+      const [rows] = await connection.query(
+        "SELECT * FROM employee_welcome_settings WHERE company_id = ?",
+        [companyId]
+      ) as [any[], any];
+      
+      if (rows.length > 0) {
+        res.json(rows[0]);
+      } else {
+        res.json(null);
+      }
+    } catch (error) {
+      console.error("Error fetching employee welcome settings:", error);
+      res.status(500).json({ error: "Internal server error" });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.post("/api/whatsapp/employee-welcome-settings", async (req, res) => {
+    const { companyId, is_active, message_template } = req.body;
+    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+
+    let connection;
+    try {
+      connection = await db.getConnection();
+      
+      const [existing] = await connection.query(
+        "SELECT id FROM employee_welcome_settings WHERE company_id = ?",
+        [companyId]
+      ) as [any[], any];
+
+      if (existing.length > 0) {
+        await connection.query(
+          "UPDATE employee_welcome_settings SET is_active = ?, message_template = ? WHERE company_id = ?",
+          [is_active, message_template, companyId]
+        );
+      } else {
+        await connection.query(
+          "INSERT INTO employee_welcome_settings (company_id, is_active, message_template) VALUES (?, ?, ?)",
+          [companyId, is_active, message_template]
+        );
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving employee welcome settings:", error);
+      res.status(500).json({ error: "Internal server error" });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.get("/api/whatsapp/idle-alert-settings", async (req, res) => {
+    const { companyId } = req.query;
+    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+
+    let connection;
+    try {
+      connection = await db.getConnection();
+      const [rows] = await connection.query(
+        "SELECT * FROM idle_alert_settings WHERE company_id = ?",
+        [companyId]
+      ) as [any[], any];
+      
+      if (rows.length > 0) {
+        res.json(rows[0]);
+      } else {
+        res.json(null);
+      }
+    } catch (error) {
+      console.error("Error fetching idle alert settings:", error);
+      res.status(500).json({ error: "Internal server error" });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.post("/api/whatsapp/idle-alert-settings", async (req, res) => {
+    const { companyId, idle_minutes, message_template, is_active } = req.body;
+    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+
+    let connection;
+    try {
+      connection = await db.getConnection();
+      
+      const [existing] = await connection.query(
+        "SELECT id FROM idle_alert_settings WHERE company_id = ?",
+        [companyId]
+      ) as [any[], any];
+
+      if (existing.length > 0) {
+        await connection.query(
+          "UPDATE idle_alert_settings SET idle_minutes = ?, message_template = ?, is_active = ? WHERE company_id = ?",
+          [idle_minutes, message_template, is_active, companyId]
+        );
+      } else {
+        await connection.query(
+          "INSERT INTO idle_alert_settings (company_id, idle_minutes, message_template, is_active) VALUES (?, ?, ?, ?)",
+          [companyId, idle_minutes, message_template, is_active]
+        );
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving idle alert settings:", error);
+      res.status(500).json({ error: "Internal server error" });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
   app.get("/api/whatsapp/attendance-settings", async (req, res) => {
     const { companyId } = req.query;
     if (!companyId) return res.status(400).json({ error: "Company ID required" });
@@ -3872,6 +4075,81 @@ async function startServer() {
       }
     } catch (error) {
       console.error('Error processing attendance alerts:', error);
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  // Idle Alert Cron Job
+  cron.schedule('* * * * *', async () => {
+    let connection;
+    try {
+      connection = await db.getConnection();
+      
+      const [settings] = await connection.query(`
+        SELECT * FROM idle_alert_settings WHERE is_active = TRUE
+      `) as [any[], any];
+
+      for (const setting of settings) {
+        const companyId = setting.company_id;
+        const idleMinutes = setting.idle_minutes;
+        const template = setting.message_template || "Dear {{employee_name}}, you have been inactive for {{idle_minutes}} minutes. Please resume your work.";
+
+        const [idleEmployees] = await connection.query(`
+          SELECT e.id, e.name, e.mobile as phone, t.last_activity_time
+          FROM employees e
+          JOIN time_tracking t ON e.id = t.employee_id
+          WHERE e.company_id = ? 
+          AND e.status = 'active'
+          AND TIMESTAMPDIFF(MINUTE, t.last_activity_time, NOW()) >= ?
+        `, [companyId, idleMinutes]) as [any[], any];
+
+        for (const emp of idleEmployees) {
+          if (!emp.phone) continue;
+
+          // Check if we already sent an alert for this specific last_activity_time
+          const [existingLogs] = await connection.query(`
+            SELECT id FROM whatsapp_logs 
+            WHERE company_id = ? AND employee_id = ? AND type = 'idle_alert' 
+            AND sent_at > ?
+          `, [companyId, emp.id, emp.last_activity_time]) as [any[], any];
+
+          if (existingLogs.length > 0) continue; // Already sent an alert for this idle period
+
+          let phone = emp.phone.replace(/\D/g, '');
+          if (phone.startsWith('0')) {
+            phone = '92' + phone.substring(1);
+          }
+          if (!phone.endsWith("@s.whatsapp.net")) {
+            phone += "@s.whatsapp.net";
+          }
+
+          let message = template.replace(/{{employee_name}}/g, emp.name);
+          message = message.replace(/{{idle_minutes}}/g, idleMinutes.toString());
+
+          const sock = sessions.get(Number(companyId));
+          if (sock) {
+            try {
+              await sock.sendMessage(phone, { text: message });
+              await connection.query(`
+                INSERT INTO whatsapp_logs (company_id, employee_id, phone_number, message, status, type)
+                VALUES (?, ?, ?, ?, 'sent', 'idle_alert')
+              `, [companyId, emp.id, phone, message]);
+            } catch (err) {
+              await connection.query(`
+                INSERT INTO whatsapp_logs (company_id, employee_id, phone_number, message, status, type)
+                VALUES (?, ?, ?, ?, 'failed', 'idle_alert')
+              `, [companyId, emp.id, phone, message]);
+            }
+            
+            // 2-5 sec delay between messages
+            const delay = Math.floor(Math.random() * 3000) + 2000;
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error processing idle alerts:', error);
     } finally {
       if (connection) connection.release();
     }
