@@ -24,7 +24,7 @@ export default function SuperAdminLogin() {
       } else {
         setError(data.message || 'Invalid username or password');
       }
-    } catch (err) {
+    } catch {
       setError('Error connecting to server');
     }
   };

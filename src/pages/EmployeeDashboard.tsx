@@ -45,6 +45,13 @@ interface NoteRecord {
   date_str?: string;
 }
 
+interface ShiftInfo {
+  name: string;
+  start_time: string;
+  end_time: string;
+  grace_period: number;
+}
+
 interface DashboardStats {
   today: {
     punchIn: string | null;
@@ -67,6 +74,7 @@ interface DashboardStats {
   attendanceList: AttendanceRecord[];
   leaveList: LeaveRecord[];
   notes: NoteRecord[];
+  shift?: ShiftInfo;
 }
 
 export default function EmployeeDashboard() {
@@ -298,6 +306,22 @@ export default function EmployeeDashboard() {
             </p>
           </div>
         </div>
+
+        {/* Shift Info */}
+        {stats?.shift && (
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <Clock size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Shift: {stats.shift.name}</p>
+              <p className="text-sm font-bold text-slate-900">
+                {stats.shift.start_time} - {stats.shift.end_time}
+              </p>
+              <p className="text-[10px] font-bold text-indigo-600">Grace: {stats.shift.grace_period}m</p>
+            </div>
+          </div>
+        )}
         
         {/* Time Tracking Widget */}
         {settings?.is_enabled && hasConsent && (

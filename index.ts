@@ -39,12 +39,17 @@ interface AttendanceRecord {
   created_at?: Date;
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = typeof import.meta !== 'undefined' ? fileURLToPath(import.meta.url) : (globalThis as any).__filename;
+const __dirname = typeof import.meta !== 'undefined' ? path.dirname(__filename) : (globalThis as any).__dirname;
 
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
+
+  // WhatsApp Service Logic
+  const sessions = new Map<number, ReturnType<typeof makeWASocket>>();
+  const qrCodes = new Map<number, string>();
+  const logger = pino({ level: "silent" });
 
   console.log("Starting server...");
   console.log(`Environment: ${process.env.NODE_ENV}`);
@@ -158,9 +163,38 @@ async function startServer() {
         license_status ENUM('valid', 'expired') DEFAULT 'valid',
         gmail_tokens TEXT,
         smtp_settings TEXT,
+        business_rules TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Create shifts table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS shifts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        start_time TIME NOT NULL,
+        end_time TIME NOT NULL,
+        break_time INT DEFAULT 60,
+        grace_period INT DEFAULT 15,
+        min_working_hours INT DEFAULT 8,
+        late_mark_rule VARCHAR(255) DEFAULT '15',
+        status ENUM('Active', 'Deactive') DEFAULT 'Active',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Insert default shifts if not exists
+    const [existingShifts] = await connection.query('SELECT COUNT(*) as count FROM shifts') as [Record<string, unknown>[], unknown];
+    if ((existingShifts[0] as { count: number }).count === 0) {
+      await connection.query(`
+        INSERT INTO shifts (name, start_time, end_time, break_time, grace_period, min_working_hours, late_mark_rule, status)
+        VALUES 
+        ('Morning', '09:00:00', '17:00:00', 60, 15, 8, '15', 'Active'),
+        ('Evening', '14:00:00', '22:00:00', 60, 15, 8, '15', 'Active'),
+        ('Night', '22:00:00', '06:00:00', 60, 15, 8, '15', 'Active')
+      `);
+    }
 
     // Ensure 'plan' column exists in companies (in case table was created before)
     try {
@@ -324,10 +358,12 @@ async function startServer() {
         mode_of_payment VARCHAR(50),
         username VARCHAR(100),
         manager_id INT,
+        shift_id INT,
         profile_picture LONGTEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
-        FOREIGN KEY (manager_id) REFERENCES employees(id) ON DELETE SET NULL
+        FOREIGN KEY (manager_id) REFERENCES employees(id) ON DELETE SET NULL,
+        FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL
       )
     `);
 
@@ -467,6 +503,43 @@ async function startServer() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create weekly_holidays table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS weekly_holidays (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        day_of_week VARCHAR(20) NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create holidays table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS holidays (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        date DATE NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create leave_types table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS leave_types (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        days_allowed INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
       )
     `);
 
@@ -758,6 +831,143 @@ async function startServer() {
         "INSERT INTO awards (company_id, name, description, gift, date, employee_id, award_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [company_id, name, description, gift, date, employee_id, award_by]
       );
+      connection.release();
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Weekly Holidays API
+  app.get("/api/weekly-holidays", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      const connection = await db.getConnection();
+      const [rows] = await connection.query("SELECT * FROM weekly_holidays WHERE company_id = ?", [company_id]);
+      connection.release();
+      res.json(rows);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/weekly-holidays", async (req, res) => {
+    try {
+      const { company_id, day_of_week, is_active } = req.body;
+      const connection = await db.getConnection();
+      await connection.query(
+        "INSERT INTO weekly_holidays (company_id, day_of_week, is_active) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE is_active = ?",
+        [company_id, day_of_week, is_active, is_active]
+      );
+      connection.release();
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Holidays API
+  app.get("/api/holidays", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      const connection = await db.getConnection();
+      const [rows] = await connection.query("SELECT * FROM holidays WHERE company_id = ? ORDER BY date ASC", [company_id]);
+      connection.release();
+      res.json(rows);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/holidays", async (req, res) => {
+    try {
+      const { company_id, name, date, description } = req.body;
+      const connection = await db.getConnection();
+      await connection.query(
+        "INSERT INTO holidays (company_id, name, date, description) VALUES (?, ?, ?, ?)",
+        [company_id, name, date, description]
+      );
+      connection.release();
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.delete("/api/holidays/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const connection = await db.getConnection();
+      await connection.query("DELETE FROM holidays WHERE id = ?", [id]);
+      connection.release();
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Leave Types API
+  app.get("/api/leave-types", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      const connection = await db.getConnection();
+      const [rows] = await connection.query("SELECT * FROM leave_types WHERE company_id = ?", [company_id]);
+      connection.release();
+      res.json(rows);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/leave-types", async (req, res) => {
+    try {
+      const { company_id, name, days_allowed } = req.body;
+      const connection = await db.getConnection();
+      await connection.query(
+        "INSERT INTO leave_types (company_id, name, days_allowed) VALUES (?, ?, ?)",
+        [company_id, name, days_allowed]
+      );
+      connection.release();
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.delete("/api/leave-types/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const connection = await db.getConnection();
+      await connection.query("DELETE FROM leave_types WHERE id = ?", [id]);
+      connection.release();
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Leave Requests API
+  app.get("/api/leave-requests", async (req, res) => {
+    try {
+      const { company_id } = req.query;
+      const connection = await db.getConnection();
+      const [rows] = await connection.query(
+        "SELECT l.*, e.name as employee_name FROM leaves l JOIN employees e ON l.employee_id = e.id WHERE l.company_id = ? ORDER BY l.created_at DESC",
+        [company_id]
+      );
+      connection.release();
+      res.json(rows);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.put("/api/leave-requests/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const connection = await db.getConnection();
+      await connection.query("UPDATE leaves SET status = ? WHERE id = ?", [status, id]);
       connection.release();
       res.json({ success: true });
     } catch (error) {
@@ -1311,11 +1521,82 @@ async function startServer() {
         if (existing.length > 0 && existing[0].status !== 'Checked-Out') {
           return res.status(400).json({ error: "Already checked in. Please check out first." });
         }
+
+        // Fetch employee's shift
+        const [empRows] = await connection.query(
+          "SELECT e.shift_id, e.mobile_no, e.name, s.start_time, s.grace_period FROM employees e LEFT JOIN shifts s ON e.shift_id = s.id WHERE e.id = ?",
+          [employee_id]
+        ) as [Record<string, unknown>[], unknown];
+
+        let isLate = false;
+        if (empRows.length > 0) {
+          const emp = empRows[0];
+          let shiftStartTime = emp.start_time;
+          let gracePeriod = emp.grace_period || 0;
+
+          // If no shift assigned, try to find the first active shift for the company
+          if (!shiftStartTime) {
+             const [activeShifts] = await connection.query(
+               "SELECT start_time, grace_period FROM shifts WHERE company_id = ? AND status = 'Active' LIMIT 1",
+               [company_id]
+             ) as [Record<string, unknown>[], unknown];
+             if (activeShifts.length > 0) {
+               shiftStartTime = activeShifts[0].start_time;
+               gracePeriod = activeShifts[0].grace_period || 0;
+             }
+          }
+
+          if (shiftStartTime) {
+            const [sHour, sMin] = shiftStartTime.split(':').map(Number);
+            const shiftDate = new Date();
+            shiftDate.setHours(sHour, sMin, 0, 0);
+            
+            const lateThreshold = new Date(shiftDate.getTime() + gracePeriod * 60000);
+            if (now > lateThreshold) {
+              isLate = true;
+            }
+          }
+        }
+
         await connection.query(
-          `INSERT INTO attendance (company_id, employee_id, date, check_in_time, check_in_lat, check_in_long, selfie_url, status) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [company_id, employee_id, date, now, lat, long, selfie_url, 'Present']
+          `INSERT INTO attendance (company_id, employee_id, date, check_in_time, check_in_lat, check_in_long, selfie_url, status, is_late) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [company_id, employee_id, date, now, lat, long, selfie_url, 'Present', isLate]
         );
+
+        // Send WhatsApp if late
+        if (isLate && empRows.length > 0 && empRows[0].mobile_no) {
+           const emp = empRows[0] as Record<string, unknown>;
+           const message = `Hello ${emp.name}, you are marked late for your shift today. Please ensure timely arrival.`;
+           
+           // Try to send if session exists
+           const sock = sessions.get(Number(company_id));
+           if (sock) {
+             let formattedNumber = String(emp.mobile_no).replace(/\D/g, "");
+             if (!formattedNumber.endsWith("@s.whatsapp.net")) {
+               formattedNumber += "@s.whatsapp.net";
+             }
+             try {
+               const sentMsg = await sock.sendMessage(formattedNumber, { text: message });
+               await connection.query(
+                 "INSERT INTO whatsapp_messages (company_id, to_number, message, status, response_log) VALUES (?, ?, ?, 'sent', ?)",
+                 [company_id, emp.mobile_no, message, JSON.stringify(sentMsg)]
+               );
+             } catch (err) {
+               console.error("[WhatsApp] Failed to send late notification:", err);
+               await connection.query(
+                 "INSERT INTO whatsapp_messages (company_id, to_number, message, status) VALUES (?, ?, ?, 'failed')",
+                 [company_id, emp.mobile_no, message]
+               );
+             }
+           } else {
+             // Just log it in the table as pending
+             await connection.query(
+               "INSERT INTO whatsapp_messages (company_id, to_number, message, status) VALUES (?, ?, ?, 'pending')",
+               [company_id, emp.mobile_no, message]
+             );
+           }
+        }
       } else if (action === 'check-out') {
         if (existing.length === 0 || existing[0].status === 'Checked-Out') {
           return res.status(400).json({ error: "No active check-in found" });
@@ -1535,17 +1816,48 @@ async function startServer() {
       const leaveBalance = 20 - totalLeavesDays;
       const salarySlipNotification = now.getDate() >= 25 ? `Your salary slip for ${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()} is ready.` : null;
 
+      // Fetch shift info
+      const [empRows] = await connection.query(
+        "SELECT e.shift_id, s.* FROM employees e LEFT JOIN shifts s ON e.shift_id = s.id WHERE e.id = ?",
+        [employee_id]
+      ) as [Record<string, unknown>[], unknown];
+
+      let shiftInfo = null;
+      if (empRows.length > 0 && empRows[0].shift_id) {
+        shiftInfo = empRows[0] as Record<string, unknown>;
+      } else {
+        // Try to find first active shift for company
+        const [activeShifts] = await connection.query(
+          "SELECT * FROM shifts WHERE company_id = ? AND status = 'Active' LIMIT 1",
+          [company_id]
+        ) as [Record<string, unknown>[], unknown];
+        if (activeShifts.length > 0) {
+          shiftInfo = activeShifts[0] as Record<string, unknown>;
+        }
+      }
+
+      const calculateDuration = (start: string, end: string) => {
+        if (!start || !end) return 9;
+        const [sH, sM] = start.split(':').map(Number);
+        const [eH, eM] = end.split(':').map(Number);
+        let diff = (eH * 60 + eM) - (sH * 60 + sM);
+        if (diff < 0) diff += 24 * 60; // Overnight shift
+        return diff / 60;
+      };
+
+      const scheduledHours = shiftInfo ? calculateDuration(String(shiftInfo.start_time), String(shiftInfo.end_time)) : 9;
+
       res.json({
         today: {
           punchIn: todayAttendance.length > 0 ? [...todayAttendance].sort((a, b) => new Date(a.check_in_time!).getTime() - new Date(b.check_in_time!).getTime())[0].check_in_time : null,
           punchOut: todayAttendance.length > 0 ? [...todayAttendance].sort((a, b) => new Date(b.check_out_time || 0).getTime() - new Date(a.check_out_time || 0).getTime())[0].check_out_time : null,
           workedTime: workedTimeToday,
           breakTime: breakTimeToday / 60,
-          scheduled: 9, // Standard 9 hours
-          leftTime: Math.max(0, 9 - workedTimeToday)
+          scheduled: scheduledHours,
+          leftTime: Math.max(0, scheduledHours - workedTimeToday)
         },
         monthly: {
-          scheduled: 22 * 9, // Standard 22 days * 9 hours
+          scheduled: 22 * scheduledHours,
           workedTime: monthlyWorkedTime,
           overtime: monthlyOvertime,
           breakTime: monthlyBreakTime / 60,
@@ -1556,7 +1868,8 @@ async function startServer() {
         salarySlipNotification,
         attendanceList: monthlyAttendance,
         leaveList: leaves,
-        notes: notes
+        notes: notes,
+        shift: shiftInfo
       });
     } catch (error: unknown) {
       const err = error as Error;
@@ -1627,15 +1940,27 @@ async function startServer() {
         return res.status(400).json({ error: "employee_id is required" });
       }
       connection = await db.getConnection();
+      
+      // Get employee to get company_id
+      const [employees] = await connection.query("SELECT company_id FROM employees WHERE id = ?", [employee_id]) as [Record<string, unknown>[], unknown];
+      if (employees.length === 0) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+      const company_id = employees[0].company_id as number;
+
+      // Get all leave types for this company to calculate total allowed days
+      const [leaveTypes] = await connection.query("SELECT days_allowed FROM leave_types WHERE company_id = ?", [company_id]) as [Record<string, unknown>[], unknown];
+      const totalAllowedDays = leaveTypes.reduce((acc, curr) => acc + ((curr.days_allowed as number) || 0), 0);
+
       const [leaves] = await connection.query(
         "SELECT * FROM leaves WHERE employee_id = ? ORDER BY created_at DESC",
         [employee_id]
       ) as [Record<string, unknown>[], unknown];
       
-      const totalLeavesDays = leaves.filter(l => l.status === 'Approved').reduce((acc, curr) => acc + (curr.total_days as number), 0);
+      const totalLeavesDays = leaves.filter(l => l.status === 'Approved').reduce((acc, curr) => acc + ((curr.total_days as number) || 0), 0);
       const pendingLeavesCount = leaves.filter(l => l.status === 'Pending').length;
       const approvedLeavesCount = leaves.filter(l => l.status === 'Approved').length;
-      const leaveBalance = 20 - totalLeavesDays;
+      const leaveBalance = totalAllowedDays - totalLeavesDays;
 
       res.json({
         leaves,
@@ -2462,11 +2787,6 @@ async function startServer() {
   });
 
   // WhatsApp Service Logic
-  const sessions = new Map<number, ReturnType<typeof makeWASocket>>();
-  const qrCodes = new Map<number, string>();
-
-  const logger = pino({ level: "silent" });
-
   const initWhatsApp = async (companyId: number) => {
     if (sessions.has(companyId)) return sessions.get(companyId);
 
@@ -3037,5 +3357,105 @@ async function startServer() {
     }
   });
 }
+
+// Employer Settings Routes
+app.get('/api/employer/settings/shifts', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM shifts') as [Record<string, unknown>[], unknown];
+    const formattedShifts = rows.map(row => {
+      const r = row as Record<string, unknown>;
+      return {
+        id: String(r.id),
+        name: r.name,
+        startTime: String(r.start_time).substring(0, 5),
+        endTime: String(r.end_time).substring(0, 5),
+        breakTime: r.break_time,
+        gracePeriod: r.grace_period,
+        minWorkingHours: r.min_working_hours,
+        lateMarkRule: r.late_mark_rule,
+        status: r.status
+      };
+    });
+    res.json(formattedShifts);
+  } catch (error) {
+    console.error('Error fetching shifts:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/employer/settings/shifts', async (req, res) => {
+  try {
+    const shift = req.body;
+    await pool.query(
+      'UPDATE shifts SET start_time = ?, end_time = ?, break_time = ?, grace_period = ?, min_working_hours = ?, late_mark_rule = ?, status = ? WHERE id = ?',
+      [shift.startTime, shift.endTime, shift.breakTime, shift.gracePeriod, shift.minWorkingHours, shift.lateMarkRule, shift.status, shift.id]
+    );
+    res.json({ message: 'Shift updated successfully' });
+  } catch (error) {
+    console.error('Error updating shift:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/employer/settings/rules', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT business_rules FROM companies LIMIT 1') as [ { business_rules: string }[], unknown];
+    if (rows.length > 0 && rows[0].business_rules) {
+      res.json(JSON.parse(rows[0].business_rules));
+    } else {
+      res.json({
+        language: 'English',
+        currency: 'USD',
+        timeZone: 'UTC',
+        timeFormat: '24h',
+        taxRate: 0,
+        vatRate: 0,
+        customField: ''
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching rules:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/employer/settings/rules', async (req, res) => {
+  try {
+    const rules = req.body;
+    await pool.query('UPDATE companies SET business_rules = ? LIMIT 1', [JSON.stringify(rules)]);
+    res.json({ message: 'Rules saved successfully' });
+  } catch (error) {
+    console.error('Error saving rules:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/employer/settings/profile', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT name, email, mobile, head_office_location, factory_location, logo_url FROM companies LIMIT 1') as [ unknown[], unknown];
+    if (rows.length > 0) {
+      res.json(rows[0]);
+    } else {
+      res.status(404).json({ error: 'Company not found' });
+    }
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/employer/settings/profile', async (req, res) => {
+  try {
+    const { name, email, mobile, head_office_location, factory_location, logo_url } = req.body;
+    await pool.query(
+      'UPDATE companies SET name = ?, email = ?, mobile = ?, head_office_location = ?, factory_location = ?, logo_url = ? LIMIT 1',
+      [name, email, mobile, head_office_location, factory_location, logo_url]
+    );
+    res.json({ message: 'Profile saved successfully' });
+  } catch (error) {
+    console.error('Error saving profile:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 startServer();

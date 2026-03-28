@@ -95,15 +95,17 @@ export default function Employee() {
   const isSuperAdminPath = location.pathname.startsWith('/super-admin');
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex">
+    <div className={isSuperAdminPath ? "min-h-screen bg-[#f8f9fa] flex" : ""}>
       {isSuperAdminPath && <SuperAdminSidebar />}
       
-      <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
-        <DynamicDashboard 
-          moduleName="employee"
-          title="Employees Dashboard"
-          widgets={employeeWidgets}
-        />
+      <main className={isSuperAdminPath ? "flex-1 p-8 lg:p-12 overflow-y-auto" : ""}>
+        <div className="max-w-7xl mx-auto">
+          <DynamicDashboard 
+            moduleName="employee"
+            title="Employees Dashboard"
+            widgets={employeeWidgets}
+          />
+        </div>
       </main>
     </div>
   );

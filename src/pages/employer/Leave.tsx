@@ -1,18 +1,53 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
-import { Edit, Plus, Search, Filter, FileText, X, Eye, Check, Trash2, CalendarDays, ArrowRight } from 'lucide-react';
+import { Edit, Plus, Search, Filter, FileText, X, Check, Trash2, CalendarDays, ArrowRight } from 'lucide-react';
 
 type TabType = 'WEEKLY HOLIDAY' | 'HOLIDAY' | 'LEAVE TYPE' | 'LEAVE APPROVAL' | 'LEAVE REPORT';
+
+interface WeeklyHoliday { id: number; day_of_week: string; is_active: boolean; }
+interface Holiday { id: number; name: string; date: string; }
+interface LeaveType { id: number; name: string; days_allowed: number; }
+interface LeaveRequest { id: number; employee_id: number; employee_name: string; leave_type: string; total_days: number; status: string; created_at: string; start_date: string; end_date: string; }
 
 export default function Leave() {
   const location = useLocation();
   const isSuperAdminPath = location.pathname.startsWith('/super-admin');
   const [activeTab, setActiveTab] = useState<TabType>('WEEKLY HOLIDAY');
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [employees, setEmployees] = useState<{id: number, name: string}[]>([]);
   const [showWeeklyHolidayModal, setShowWeeklyHolidayModal] = useState(false);
   const [showHolidayModal, setShowHolidayModal] = useState(false);
   const [showLeaveTypeModal, setShowLeaveTypeModal] = useState(false);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [whRes, hRes, ltRes, lrRes, empRes] = await Promise.all([
+        fetch('/api/weekly-holidays?company_id=1'),
+        fetch('/api/holidays?company_id=1'),
+        fetch('/api/leave-types?company_id=1'),
+        fetch('/api/leave-requests?company_id=1'),
+        fetch('/api/employees?company_id=1')
+      ]);
+      const whData: WeeklyHoliday[] = await whRes.json();
+      setHolidays(await hRes.json());
+      setLeaveTypes(await ltRes.json());
+      setLeaveRequests(await lrRes.json());
+      setEmployees(await empRes.json());
+      
+      const activeDays = Array.from(new Set(whData.filter(h => h.is_active).map(h => h.day_of_week)));
+      setSelectedDays(activeDays);
+    } catch (error) {
+      console.error('Error fetching leave data:', error);
+    }
+  };
 
   // Holiday Form State
   const [holidayName, setHolidayName] = useState('');
@@ -27,10 +62,91 @@ export default function Leave() {
   const tabs: TabType[] = ['WEEKLY HOLIDAY', 'HOLIDAY', 'LEAVE TYPE', 'LEAVE APPROVAL', 'LEAVE REPORT'];
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+  const saveHoliday = async () => {
+    try {
+      await fetch('/api/holidays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: 1, name: holidayName, date: fromDate, description: '' })
+      });
+      setShowHolidayModal(false);
+      setHolidayName('');
+      setFromDate('');
+      setToDate('');
+      setTotalDays(0);
+      fetchData();
+    } catch (error) {
+      console.error('Error saving holiday:', error);
+    }
+  };
+
+  const saveLeaveType = async () => {
+    try {
+      await fetch('/api/leave-types', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: 1, name: leaveTypeName, days_allowed: leaveTypeDays })
+      });
+      setShowLeaveTypeModal(false);
+      setLeaveTypeName('');
+      setLeaveTypeDays(0);
+      fetchData();
+    } catch (error) {
+      console.error('Error saving leave type:', error);
+    }
+  };
+
   const toggleDay = (day: string) => {
     setSelectedDays(prev => 
       prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
     );
+  };
+
+  const saveWeeklyHoliday = async () => {
+    try {
+      for (const day of days) {
+        await fetch('/api/weekly-holidays', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company_id: 1, day_of_week: day, is_active: selectedDays.includes(day) })
+        });
+      }
+      setShowWeeklyHolidayModal(false);
+      fetchData();
+    } catch (error) {
+      console.error('Error saving weekly holidays:', error);
+    }
+  };
+
+  const deleteHoliday = async (id: number) => {
+    try {
+      await fetch(`/api/holidays/${id}`, { method: 'DELETE' });
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting holiday:', error);
+    }
+  };
+
+  const deleteLeaveType = async (id: number) => {
+    try {
+      await fetch(`/api/leave-types/${id}`, { method: 'DELETE' });
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting leave type:', error);
+    }
+  };
+
+  const updateLeaveRequestStatus = async (id: number, status: string) => {
+    try {
+      await fetch(`/api/leave-requests/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error updating leave request:', error);
+    }
   };
 
   const calculateTotalDays = (start: string, end: string) => {
@@ -136,11 +252,7 @@ export default function Leave() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {[
-                    { id: 1, name: 'New Year', from: 'Jan 01, 2026', to: 'Jan 01, 2026', total: 1 },
-                    { id: 2, name: 'Eid-ul-Fitr', from: 'Mar 20, 2026', to: 'Mar 22, 2026', total: 3 },
-                    { id: 3, name: 'Independence Day', from: 'Aug 14, 2026', to: 'Aug 14, 2026', total: 1 },
-                  ].map((holiday, idx) => (
+                  {holidays.map((holiday, idx) => (
                     <tr key={holiday.id} className="hover:bg-slate-50/30 transition-colors group">
                       <td className="px-10 py-8 text-xs text-slate-400 font-black">{(idx + 1).toString().padStart(2, '0')}</td>
                       <td className="px-10 py-8">
@@ -148,14 +260,12 @@ export default function Leave() {
                       </td>
                       <td className="px-10 py-8">
                         <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                          <span>{holiday.from}</span>
-                          <ArrowRight size={12} className="text-slate-300" />
-                          <span>{holiday.to}</span>
+                          <span>{new Date(holiday.date).toLocaleDateString()}</span>
                         </div>
                       </td>
                       <td className="px-10 py-8">
                         <span className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200">
-                          {holiday.total} Days
+                          1 Day
                         </span>
                       </td>
                       <td className="px-10 py-8 text-right">
@@ -166,7 +276,10 @@ export default function Leave() {
                           >
                             <Edit size={18} strokeWidth={2.5} />
                           </button>
-                          <button className="w-12 h-12 bg-white text-red-600 rounded-2xl flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-500 border border-slate-100 hover:border-red-600 shadow-sm hover:shadow-xl hover:shadow-red-100">
+                          <button 
+                            onClick={() => deleteHoliday(holiday.id)}
+                            className="w-12 h-12 bg-white text-red-600 rounded-2xl flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-500 border border-slate-100 hover:border-red-600 shadow-sm hover:shadow-xl hover:shadow-red-100"
+                          >
                             <Trash2 size={18} strokeWidth={2.5} />
                           </button>
                         </div>
@@ -205,11 +318,7 @@ export default function Leave() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {[
-                    { id: 1, name: 'Annual Leave', days: 15 },
-                    { id: 2, name: 'Sick Leave', days: 10 },
-                    { id: 3, name: 'Maternity Leave', days: 90 },
-                  ].map((type, idx) => (
+                  {leaveTypes.map((type, idx) => (
                     <tr key={type.id} className="hover:bg-slate-50/30 transition-colors group">
                       <td className="px-10 py-8 text-xs text-slate-400 font-black">{(idx + 1).toString().padStart(2, '0')}</td>
                       <td className="px-10 py-8">
@@ -217,7 +326,7 @@ export default function Leave() {
                       </td>
                       <td className="px-10 py-8">
                         <span className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-blue-100">
-                          {type.days} Days
+                          {type.days_allowed} Days
                         </span>
                       </td>
                       <td className="px-10 py-8 text-right">
@@ -228,7 +337,10 @@ export default function Leave() {
                           >
                             <Edit size={18} strokeWidth={2.5} />
                           </button>
-                          <button className="w-12 h-12 bg-white text-red-600 rounded-2xl flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-500 border border-slate-100 hover:border-red-600 shadow-sm hover:shadow-xl hover:shadow-red-100">
+                          <button 
+                            onClick={() => deleteLeaveType(type.id)}
+                            className="w-12 h-12 bg-white text-red-600 rounded-2xl flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-500 border border-slate-100 hover:border-red-600 shadow-sm hover:shadow-xl hover:shadow-red-100"
+                          >
                             <Trash2 size={18} strokeWidth={2.5} />
                           </button>
                         </div>
@@ -273,41 +385,39 @@ export default function Leave() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {[
-                    { id: 1, employee: 'Sarah Connor', type: 'Annual Leave', applyDate: 'Mar 20, 2026', start: 'Mar 28', end: 'Apr 05', days: 8, status: 'Approved' },
-                    { id: 2, employee: 'John Smith', type: 'Sick Leave', applyDate: 'Mar 24, 2026', start: 'Mar 25', end: 'Mar 26', days: 2, status: 'Pending' },
-                    { id: 3, employee: 'Ellen Ripley', type: 'Casual Leave', applyDate: 'Mar 22, 2026', start: 'Mar 26', end: 'Mar 26', days: 1, status: 'Pending' },
-                  ].map((request, idx) => (
+                  {leaveRequests.map((request, idx) => (
                     <tr key={request.id} className="hover:bg-slate-50/30 transition-colors group">
                       <td className="px-8 py-8 text-xs text-slate-400 font-black">{(idx + 1).toString().padStart(2, '0')}</td>
                       <td className="px-8 py-8">
                         <div className="flex items-center gap-4">
                           <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 font-black text-[10px] border border-blue-100">
-                            {request.employee.split(' ').map(n => n[0]).join('')}
+                            {request.employee_name.split(' ').map((n: string) => n[0]).join('')}
                           </div>
-                          <span className="text-sm font-black text-slate-900 uppercase tracking-tight">{request.employee}</span>
+                          <span className="text-sm font-black text-slate-900 uppercase tracking-tight">{request.employee_name}</span>
                         </div>
                       </td>
                       <td className="px-8 py-8">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{request.type}</span>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{request.leave_type}</span>
                       </td>
-                      <td className="px-8 py-8 text-[10px] font-black text-slate-500 uppercase tracking-widest">{request.applyDate}</td>
+                      <td className="px-8 py-8 text-[10px] font-black text-slate-500 uppercase tracking-widest">{new Date(request.created_at).toLocaleDateString()}</td>
                       <td className="px-8 py-8">
                          <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                          <span>{request.start}</span>
+                          <span>{new Date(request.start_date).toLocaleDateString()}</span>
                           <ArrowRight size={10} className="text-slate-300" />
-                          <span>{request.end}</span>
+                          <span>{new Date(request.end_date).toLocaleDateString()}</span>
                         </div>
                       </td>
                       <td className="px-8 py-8">
                         <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest border border-slate-200">
-                          {request.days}
+                          {request.total_days}
                         </span>
                       </td>
                       <td className="px-8 py-8">
                         <span className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border shadow-sm ${
                           request.status === 'Approved' 
                             ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
+                            : request.status === 'Rejected'
+                            ? 'bg-red-50 text-red-600 border-red-100'
                             : 'bg-amber-50 text-amber-600 border-amber-100'
                         }`}>
                           {request.status}
@@ -315,17 +425,15 @@ export default function Leave() {
                       </td>
                       <td className="px-8 py-8 text-right">
                         <div className="flex justify-end gap-2">
-                          <button className="w-10 h-10 bg-white text-blue-600 rounded-xl flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all border border-slate-100 hover:border-blue-600 shadow-sm" title="View">
-                            <Eye size={16} strokeWidth={2.5} />
-                          </button>
-                          <button className="w-10 h-10 bg-white text-emerald-600 rounded-xl flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all border border-slate-100 hover:border-emerald-600 shadow-sm" title="Approve">
+                          <button 
+                            onClick={() => updateLeaveRequestStatus(request.id, 'Approved')}
+                            className="w-10 h-10 bg-white text-emerald-600 rounded-xl flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all border border-slate-100 hover:border-emerald-600 shadow-sm" title="Approve">
                             <Check size={16} strokeWidth={2.5} />
                           </button>
-                          <button className="w-10 h-10 bg-white text-amber-600 rounded-xl flex items-center justify-center hover:bg-amber-600 hover:text-white transition-all border border-slate-100 hover:border-amber-600 shadow-sm" title="Reject">
+                          <button 
+                            onClick={() => updateLeaveRequestStatus(request.id, 'Rejected')}
+                            className="w-10 h-10 bg-white text-amber-600 rounded-xl flex items-center justify-center hover:bg-amber-600 hover:text-white transition-all border border-slate-100 hover:border-amber-600 shadow-sm" title="Reject">
                             <X size={16} strokeWidth={2.5} />
-                          </button>
-                          <button className="w-10 h-10 bg-white text-red-600 rounded-xl flex items-center justify-center hover:bg-red-600 hover:text-white transition-all border border-slate-100 hover:border-red-600 shadow-sm" title="Delete">
-                            <Trash2 size={16} strokeWidth={2.5} />
                           </button>
                         </div>
                       </td>
@@ -357,13 +465,19 @@ export default function Leave() {
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Employee</label>
                   <select className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20">
-                    <option>All Employees</option>
+                    <option value="">All Employees</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Leave Type</label>
                   <select className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20">
-                    <option>All Types</option>
+                    <option value="">All Types</option>
+                    {leaveTypes.map(lt => (
+                      <option key={lt.id} value={lt.id}>{lt.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -384,37 +498,48 @@ export default function Leave() {
                   <thead>
                     <tr className="bg-slate-50/50 border-b border-slate-100">
                       <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Employee</th>
-                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Annual</th>
-                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Sick</th>
-                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Casual</th>
+                      {leaveTypes.map(lt => (
+                        <th key={lt.id} className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{lt.name}</th>
+                      ))}
                       <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Total Taken</th>
                       <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Remaining</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {[
-                      { name: 'Sarah Connor', annual: 5, sick: 2, casual: 1, total: 8, remaining: 17 },
-                      { name: 'John Smith', annual: 0, sick: 4, casual: 0, total: 4, remaining: 21 },
-                    ].map((row, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/30 transition-colors">
-                        <td className="px-8 py-6">
-                          <span className="text-sm font-black text-slate-700">{row.name}</span>
-                        </td>
-                        <td className="px-8 py-6 text-sm font-bold text-slate-500">{row.annual}</td>
-                        <td className="px-8 py-6 text-sm font-bold text-slate-500">{row.sick}</td>
-                        <td className="px-8 py-6 text-sm font-bold text-slate-500">{row.casual}</td>
-                        <td className="px-8 py-6">
-                          <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100">
-                            {row.total} Days
-                          </span>
-                        </td>
-                        <td className="px-8 py-6">
-                          <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-emerald-100">
-                            {row.remaining} Days
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {employees.map((emp) => {
+                      const empLeaves = leaveRequests.filter(lr => lr.employee_id === emp.id && lr.status === 'Approved');
+                      const totalTaken = empLeaves.reduce((acc, curr) => acc + curr.total_days, 0);
+                      const totalAllowed = leaveTypes.reduce((acc, curr) => acc + curr.days_allowed, 0);
+                      return (
+                        <tr key={emp.id} className="hover:bg-slate-50/30 transition-colors">
+                          <td className="px-8 py-6">
+                            <span className="text-sm font-black text-slate-700">{emp.name}</span>
+                          </td>
+                          {leaveTypes.map(lt => {
+                            const taken = empLeaves.filter(lr => lr.leave_type === lt.name).reduce((acc, curr) => acc + curr.total_days, 0);
+                            return (
+                              <td key={lt.id} className="px-8 py-6 text-sm font-bold text-slate-500">
+                                {taken} / {lt.days_allowed}
+                              </td>
+                            );
+                          })}
+                          <td className="px-8 py-6">
+                            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100">
+                              {totalTaken} Days
+                            </span>
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                              totalAllowed - totalTaken > 0 
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
+                                : 'bg-red-50 text-red-600 border-red-100'
+                            }`}>
+                              {totalAllowed - totalTaken} Days
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -427,10 +552,10 @@ export default function Leave() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex">
+    <div className={isSuperAdminPath ? "min-h-screen bg-[#f8f9fa] flex" : ""}>
       {isSuperAdminPath && <SuperAdminSidebar />}
       
-      <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
+      <main className={isSuperAdminPath ? "flex-1 p-8 lg:p-12 overflow-y-auto" : ""}>
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase mb-2">Leave Management</h1>
@@ -509,7 +634,7 @@ export default function Leave() {
                   Cancel
                 </button>
                 <button 
-                  onClick={() => setShowWeeklyHolidayModal(false)}
+                  onClick={saveWeeklyHoliday}
                   className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
                 >
                   Save Changes
@@ -585,7 +710,7 @@ export default function Leave() {
                   Cancel
                 </button>
                 <button 
-                  onClick={() => setShowHolidayModal(false)}
+                  onClick={saveHoliday}
                   className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
                 >
                   Save Holiday
@@ -653,7 +778,7 @@ export default function Leave() {
                   Cancel
                 </button>
                 <button 
-                  onClick={() => setShowLeaveTypeModal(false)}
+                  onClick={saveLeaveType}
                   className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
                 >
                   Save Type

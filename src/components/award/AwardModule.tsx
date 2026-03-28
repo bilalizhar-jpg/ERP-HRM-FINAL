@@ -11,10 +11,25 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+interface Award {
+  id: number;
+  name: string;
+  description: string;
+  gift: string;
+  date: string;
+  employee_name: string;
+  award_by: string;
+}
+
+interface Employee {
+  id: number;
+  name: string;
+}
+
 export default function AwardModule() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [awards, setAwards] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const [awards, setAwards] = useState<Award[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

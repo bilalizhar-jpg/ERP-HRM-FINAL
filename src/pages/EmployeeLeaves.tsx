@@ -32,16 +32,23 @@ interface LeaveStats {
   balance: number;
 }
 
+interface LeaveType {
+  id: number;
+  name: string;
+  days_allowed: number;
+}
+
 export default function EmployeeLeaves() {
   const [leaves, setLeaves] = useState<Leave[]>([]);
-  const [stats, setStats] = useState<LeaveStats>({ total: 0, approved: 0, pending: 0, balance: 20 });
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [stats, setStats] = useState<LeaveStats>({ total: 0, approved: 0, pending: 0, balance: 0 });
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
 
   // Form state
-  const [leaveType, setLeaveType] = useState('Casual Leave');
+  const [leaveType, setLeaveType] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
@@ -59,15 +66,33 @@ export default function EmployeeLeaves() {
       }
     } catch (error) {
       console.error('Error fetching leaves:', error);
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const fetchLeaveTypes = async () => {
+    try {
+      const response = await fetch(`/api/leave-types?company_id=${employee.company_id}`);
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setLeaveTypes(data);
+        if (data.length > 0 && !leaveType) {
+          setLeaveType(data[0].name);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching leave types:', error);
     }
   };
 
   useEffect(() => {
-    if (employee.id) {
-      fetchLeaves();
-    }
+    const init = async () => {
+      if (employee.id) {
+        setLoading(true);
+        await Promise.all([fetchLeaves(), fetchLeaveTypes()]);
+        setLoading(false);
+      }
+    };
+    init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee.id]);
 
@@ -195,20 +220,22 @@ export default function EmployeeLeaves() {
             Leave Types & Limits
           </h3>
           <div className="space-y-4">
-            {[
-              { type: 'Casual Leave', limit: '10 Days', color: 'blue' },
-              { type: 'Sick Leave', limit: '07 Days', color: 'rose' },
-              { type: 'Annual Leave', limit: '15 Days', color: 'emerald' },
-              { type: 'Maternity/Paternity', limit: '90 Days', color: 'purple' },
-            ].map((item) => (
-              <div key={item.type} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 group hover:bg-white hover:border-blue-100 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full bg-${item.color}-500`} />
-                  <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">{item.type}</span>
+            {leaveTypes.map((item, i) => {
+              const colors = ['blue', 'rose', 'emerald', 'purple', 'amber', 'indigo'];
+              const color = colors[i % colors.length];
+              return (
+                <div key={item.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 group hover:bg-white hover:border-blue-100 transition-all">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full bg-${color}-500`} />
+                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">{item.name}</span>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-600">{item.days_allowed} Days</span>
                 </div>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-600">{item.limit}</span>
-              </div>
-            ))}
+              );
+            })}
+            {leaveTypes.length === 0 && (
+              <p className="text-[10px] text-slate-400 font-medium italic">No leave types configured.</p>
+            )}
           </div>
           <p className="mt-6 text-[9px] text-slate-400 font-medium leading-relaxed italic">
             * Leave limits are subject to company policy and manager approval.
@@ -356,12 +383,9 @@ export default function EmployeeLeaves() {
                       onChange={(e) => setLeaveType(e.target.value)}
                       className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-600 transition-all uppercase appearance-none"
                     >
-                      <option>Casual Leave</option>
-                      <option>Sick Leave</option>
-                      <option>Annual Leave</option>
-                      <option>Maternity Leave</option>
-                      <option>Paternity Leave</option>
-                      <option>Unpaid Leave</option>
+                      {leaveTypes.map(type => (
+                        <option key={type.id} value={type.name}>{type.name}</option>
+                      ))}
                     </select>
                   </div>
 
