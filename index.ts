@@ -39,8 +39,8 @@ interface AttendanceRecord {
   created_at?: Date;
 }
 
-const __filename = typeof import.meta !== 'undefined' ? fileURLToPath(import.meta.url) : (globalThis as any).__filename;
-const __dirname = typeof import.meta !== 'undefined' ? path.dirname(__filename) : (globalThis as any).__dirname;
+const __filename = typeof import.meta !== 'undefined' ? fileURLToPath(import.meta.url) : (globalThis as Record<string, unknown>).__filename as string;
+const __dirname = typeof import.meta !== 'undefined' ? path.dirname(__filename) : (globalThis as Record<string, unknown>).__dirname as string;
 
 async function startServer() {
   const app = express();
@@ -209,6 +209,41 @@ async function startServer() {
     }
     try {
       await connection.query("ALTER TABLE companies ADD COLUMN smtp_settings TEXT");
+    } catch {
+      // Column might already exist
+    }
+    try {
+      await connection.query("ALTER TABLE companies ADD COLUMN subsidiary VARCHAR(255)");
+    } catch {
+      // Column might already exist
+    }
+    try {
+      await connection.query("ALTER TABLE companies ADD COLUMN head_office_location VARCHAR(255)");
+    } catch {
+      // Column might already exist
+    }
+    try {
+      await connection.query("ALTER TABLE companies ADD COLUMN factory_location VARCHAR(255)");
+    } catch {
+      // Column might already exist
+    }
+    try {
+      await connection.query("ALTER TABLE companies ADD COLUMN logo_url TEXT");
+    } catch {
+      // Column might already exist
+    }
+    try {
+      await connection.query("ALTER TABLE companies ADD COLUMN business_rules TEXT");
+    } catch {
+      // Column might already exist
+    }
+    try {
+      await connection.query("ALTER TABLE companies ADD COLUMN website VARCHAR(255)");
+    } catch {
+      // Column might already exist
+    }
+    try {
+      await connection.query("ALTER TABLE companies ADD COLUMN about TEXT");
     } catch {
       // Column might already exist
     }
@@ -445,6 +480,7 @@ async function startServer() {
         id INT AUTO_INCREMENT PRIMARY KEY,
         company_id INT NOT NULL,
         employee_id INT NOT NULL,
+        shift_id INT,
         date DATE NOT NULL,
         check_in_time DATETIME,
         check_out_time DATETIME,
@@ -465,7 +501,8 @@ async function startServer() {
         overtime_hours DECIMAL(5,2) DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
-        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+        FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL
       )
     `);
 
@@ -486,6 +523,12 @@ async function startServer() {
     } catch { /* Ignore */ }
     try {
       await connection.query("ALTER TABLE attendance ADD COLUMN break_time INT DEFAULT 0");
+    } catch { /* Ignore */ }
+    try {
+      await connection.query("ALTER TABLE attendance ADD COLUMN shift_id INT");
+    } catch { /* Ignore */ }
+    try {
+      await connection.query("ALTER TABLE attendance ADD CONSTRAINT fk_shift FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL");
     } catch { /* Ignore */ }
 
     // Create leaves table
@@ -559,17 +602,36 @@ async function startServer() {
     // Create time tracking tables
     await connection.query(`
       CREATE TABLE IF NOT EXISTS time_tracking_settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
         company_id INT NOT NULL,
         employee_id INT NOT NULL,
+        status ENUM('active', 'deactive') DEFAULT 'deactive',
+        auto_mode ENUM('on', 'off') DEFAULT 'off',
         is_enabled BOOLEAN DEFAULT FALSE,
         screenshot_enabled BOOLEAN DEFAULT FALSE,
         screenshot_interval INT DEFAULT 10,
         idle_threshold INT DEFAULT 5,
-        PRIMARY KEY (company_id, employee_id),
+        UNIQUE KEY company_employee (company_id, employee_id),
         FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
       )
     `);
+
+    // Ensure id column exists and is primary key if table was already created
+    try {
+      await connection.query("ALTER TABLE time_tracking_settings ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY FIRST");
+    } catch { /* Ignore */ }
+    try {
+      await connection.query("ALTER TABLE time_tracking_settings ADD UNIQUE KEY company_employee (company_id, employee_id)");
+    } catch { /* Ignore */ }
+
+    // Ensure status and auto_mode columns exist if table was already created
+    try {
+      await connection.query("ALTER TABLE time_tracking_settings ADD COLUMN status ENUM('active', 'deactive') DEFAULT 'deactive'");
+    } catch { /* Ignore */ }
+    try {
+      await connection.query("ALTER TABLE time_tracking_settings ADD COLUMN auto_mode ENUM('on', 'off') DEFAULT 'off'");
+    } catch { /* Ignore */ }
 
     await connection.query(`
       CREATE TABLE IF NOT EXISTS time_tracking_logs (
@@ -726,9 +788,10 @@ async function startServer() {
 
   // Employees API
   app.get("/api/employees", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       let query = "SELECT id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields, created_at FROM employees";
       const params: (string | number)[] = [];
       
@@ -740,19 +803,21 @@ async function startServer() {
       query += " ORDER BY created_at DESC";
       
       const [rows] = await connection.query(query, params);
-      connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching employees:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/employees", async (req, res) => {
+    let connection;
     try {
       const { company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       // Hash password - changed to plain text for admin visibility as requested
       const passwordToStore = password || '123456';
@@ -762,302 +827,340 @@ async function startServer() {
         [company_id, name, email, passwordToStore, employee_id, department, designation, status || 'active', mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields ? JSON.stringify(custom_fields) : null]
       );
       
-      connection.release();
       res.json({ success: true, id: (result as { insertId: number }).insertId });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error creating employee:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.put("/api/employees/:id", async (req, res) => {
+    let connection;
     try {
       const { id } = req.params;
       const { name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       await connection.query(
         "UPDATE employees SET name = ?, email = ?, employee_id = ?, department = ?, designation = ?, status = ?, mobile_no = ?, date_of_birth = ?, joining_date = ?, blood_group = ?, location = ?, city = ?, employee_type = ?, national_id = ?, salary = ?, tax_deduction = ?, bank_name = ?, bank_account_no = ?, mode_of_payment = ?, username = ?, profile_picture = ?, custom_fields = ? WHERE id = ?",
         [name, email, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields ? JSON.stringify(custom_fields) : null, id]
       );
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error updating employee:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.delete("/api/employees/:id", async (req, res) => {
+    let connection;
     try {
       const { id } = req.params;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       await connection.query("DELETE FROM employees WHERE id = ?", [id]);
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error deleting employee:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Awards API
   app.get("/api/awards", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query(
         "SELECT a.*, e.name as employee_name FROM awards a JOIN employees e ON a.employee_id = e.id WHERE a.company_id = ? ORDER BY a.created_at DESC",
         [company_id]
       );
-      connection.release();
       res.json(rows);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/awards", async (req, res) => {
+    let connection;
     try {
       const { company_id, name, description, gift, date, employee_id, award_by } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query(
         "INSERT INTO awards (company_id, name, description, gift, date, employee_id, award_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [company_id, name, description, gift, date, employee_id, award_by]
       );
-      connection.release();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Weekly Holidays API
   app.get("/api/weekly-holidays", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query("SELECT * FROM weekly_holidays WHERE company_id = ?", [company_id]);
-      connection.release();
       res.json(rows);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/weekly-holidays", async (req, res) => {
+    let connection;
     try {
       const { company_id, day_of_week, is_active } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query(
         "INSERT INTO weekly_holidays (company_id, day_of_week, is_active) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE is_active = ?",
         [company_id, day_of_week, is_active, is_active]
       );
-      connection.release();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Holidays API
   app.get("/api/holidays", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query("SELECT * FROM holidays WHERE company_id = ? ORDER BY date ASC", [company_id]);
-      connection.release();
       res.json(rows);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/holidays", async (req, res) => {
+    let connection;
     try {
       const { company_id, name, date, description } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query(
         "INSERT INTO holidays (company_id, name, date, description) VALUES (?, ?, ?, ?)",
         [company_id, name, date, description]
       );
-      connection.release();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.delete("/api/holidays/:id", async (req, res) => {
+    let connection;
     try {
       const { id } = req.params;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query("DELETE FROM holidays WHERE id = ?", [id]);
-      connection.release();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Leave Types API
   app.get("/api/leave-types", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query("SELECT * FROM leave_types WHERE company_id = ?", [company_id]);
-      connection.release();
       res.json(rows);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/leave-types", async (req, res) => {
+    let connection;
     try {
       const { company_id, name, days_allowed } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query(
         "INSERT INTO leave_types (company_id, name, days_allowed) VALUES (?, ?, ?)",
         [company_id, name, days_allowed]
       );
-      connection.release();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.delete("/api/leave-types/:id", async (req, res) => {
+    let connection;
     try {
       const { id } = req.params;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query("DELETE FROM leave_types WHERE id = ?", [id]);
-      connection.release();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Leave Requests API
   app.get("/api/leave-requests", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query(
         "SELECT l.*, e.name as employee_name FROM leaves l JOIN employees e ON l.employee_id = e.id WHERE l.company_id = ? ORDER BY l.created_at DESC",
         [company_id]
       );
-      connection.release();
       res.json(rows);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.put("/api/leave-requests/:id", async (req, res) => {
+    let connection;
     try {
       const { id } = req.params;
       const { status } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query("UPDATE leaves SET status = ? WHERE id = ?", [status, id]);
-      connection.release();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Departments API
   app.get("/api/departments", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
       if (!company_id) {
         return res.status(400).json({ error: "company_id is required" });
       }
       
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query("SELECT * FROM departments WHERE company_id = ? ORDER BY created_at DESC", [company_id]);
-      connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching departments:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/departments", async (req, res) => {
+    let connection;
     try {
       const { company_id, name, head_of_department, status } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       const [result] = await connection.query(
         "INSERT INTO departments (company_id, name, head_of_department, status) VALUES (?, ?, ?, ?)",
         [company_id, name, head_of_department, status || 'active']
       );
       
-      connection.release();
       res.json({ success: true, id: (result as { insertId: number }).insertId });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error creating department:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.put("/api/departments/:id", async (req, res) => {
+    let connection;
     try {
       const { id } = req.params;
       const { name, head_of_department, status } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       await connection.query(
         "UPDATE departments SET name = ?, head_of_department = ?, status = ? WHERE id = ?",
         [name, head_of_department, status, id]
       );
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error updating department:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.delete("/api/departments/:id", async (req, res) => {
+    let connection;
     try {
       const { id } = req.params;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       await connection.query("DELETE FROM departments WHERE id = ?", [id]);
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error deleting department:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Designations API
   app.get("/api/designations", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
       if (!company_id) {
         return res.status(400).json({ error: "company_id is required" });
       }
       
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query(`
         SELECT d.*, dep.name as department_name 
         FROM designations d
@@ -1065,93 +1168,103 @@ async function startServer() {
         WHERE d.company_id = ? 
         ORDER BY d.created_at DESC
       `, [company_id]);
-      connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching designations:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/designations", async (req, res) => {
+    let connection;
     try {
       const { company_id, department_id, name, status } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       const [result] = await connection.query(
         "INSERT INTO designations (company_id, department_id, name, status) VALUES (?, ?, ?, ?)",
         [company_id, department_id, name, status || 'active']
       );
       
-      connection.release();
       res.json({ success: true, id: (result as { insertId: number }).insertId });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error creating designation:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.put("/api/designations/:id", async (req, res) => {
+    let connection;
     try {
       const { id } = req.params;
       const { department_id, name, status } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       await connection.query(
         "UPDATE designations SET department_id = ?, name = ?, status = ? WHERE id = ?",
         [department_id, name, status, id]
       );
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error updating designation:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.delete("/api/designations/:id", async (req, res) => {
+    let connection;
     try {
       const { id } = req.params;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       await connection.query("DELETE FROM designations WHERE id = ?", [id]);
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error deleting designation:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Dashboard Widgets API
   app.get("/api/dashboard-widgets", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
       if (!company_id) {
         return res.status(400).json({ error: "company_id is required" });
       }
       
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query("SELECT * FROM dashboard_widgets WHERE company_id = ? ORDER BY position ASC", [company_id]);
-      connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching dashboard widgets:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/dashboard-widgets", async (req, res) => {
+    let connection;
     try {
       const { company_id, widgets } = req.body; // widgets: [{widget_id, is_enabled, position}, ...]
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       for (const widget of widgets) {
         await connection.query(`
@@ -1161,87 +1274,97 @@ async function startServer() {
         `, [company_id, widget.widget_id, widget.is_enabled, widget.position, widget.is_enabled, widget.position]);
       }
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error updating dashboard widgets:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Modules API
   app.get("/api/modules", async (req, res) => {
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query("SELECT * FROM modules");
-      connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching modules:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/modules", async (req, res) => {
+    let connection;
     try {
       const { name, description, status } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [result] = await connection.query(
         "INSERT INTO modules (name, description, status) VALUES (?, ?, ?)",
         [name, description, status || 'active']
       );
-      connection.release();
       res.json({ success: true, id: (result as { insertId: number }).insertId });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error creating module:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.get("/api/company-modules", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const query = company_id 
         ? "SELECT m.*, cm.is_enabled FROM modules m LEFT JOIN company_modules cm ON m.id = cm.module_id AND cm.company_id = ?"
         : "SELECT * FROM modules";
       const params = company_id ? [company_id] : [];
       const [rows] = await connection.query(query, params);
-      connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching company modules:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/company-modules", async (req, res) => {
+    let connection;
     try {
       const { company_id, module_id, is_enabled } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query(`
         INSERT INTO company_modules (company_id, module_id, is_enabled)
         VALUES (?, ?, ?)
         ON DUPLICATE KEY UPDATE is_enabled = ?
       `, [company_id, module_id, is_enabled, is_enabled]);
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error updating company module:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Attendance API
   app.get("/api/attendance", async (req, res) => {
+    let connection;
     try {
       const { company_id, date, start, end } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       let query = `
         SELECT a.*, 
@@ -1257,34 +1380,37 @@ async function startServer() {
       
       if (date) {
         query += " AND a.date = ?";
-        params.push(date);
+        params.push(date as string);
       } else if (start && end) {
         query += " AND a.date >= ? AND a.date <= ?";
-        params.push(start, end);
+        params.push(start as string, end as string);
       }
       
       query += " ORDER BY a.date DESC, e.name ASC";
       
       const [rows] = await connection.query(query, params);
-      connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching attendance:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/attendance", async (req, res) => {
+    let connection;
     try {
-      const { company_id, employee_id, date, check_in, check_out, break_time, status, is_late, working_hours, overtime_hours } = req.body;
-      const connection = await db.getConnection();
+      const { company_id, employee_id, shift_id, date, check_in, check_out, break_time, status, is_late, working_hours, overtime_hours } = req.body;
+      connection = await db.getConnection();
       
       // Upsert attendance record
       await connection.query(`
-        INSERT INTO attendance (company_id, employee_id, date, check_in, check_out, break_time, status, is_late, working_hours, overtime_hours)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO attendance (company_id, employee_id, shift_id, date, check_in, check_out, break_time, status, is_late, working_hours, overtime_hours)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
+          shift_id = VALUES(shift_id),
           check_in = VALUES(check_in),
           check_out = VALUES(check_out),
           break_time = VALUES(break_time),
@@ -1292,27 +1418,50 @@ async function startServer() {
           is_late = VALUES(is_late),
           working_hours = VALUES(working_hours),
           overtime_hours = VALUES(overtime_hours)
-      `, [company_id, employee_id, date, check_in || null, check_out || null, break_time || 0, status, is_late || false, working_hours || 0, overtime_hours || 0]);
+      `, [company_id, employee_id, shift_id || null, date, check_in || null, check_out || null, break_time || 0, status, is_late || false, working_hours || 0, overtime_hours || 0]);
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error saving attendance:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // --- Time Tracking APIs ---
+  app.get("/api/time-tracking/settings/:company_id", async (req, res) => {
+    let connection;
+    try {
+      const { company_id } = req.params;
+      connection = await db.getConnection();
+      const [rows] = await connection.query(`
+        SELECT tts.*, e.name as employee_name 
+        FROM time_tracking_settings tts
+        JOIN employees e ON tts.employee_id = e.id
+        WHERE tts.company_id = ?
+      `, [company_id]) as [Record<string, unknown>[], unknown];
+      
+      res.json(rows);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error fetching time tracking settings list:", err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
   app.get("/api/time-tracking/settings/:company_id/:employee_id", async (req, res) => {
+    let connection;
     try {
       const { company_id, employee_id } = req.params;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query(
         "SELECT * FROM time_tracking_settings WHERE company_id = ? AND employee_id = ?",
         [company_id, employee_id]
       ) as [Record<string, unknown>[], unknown];
-      connection.release();
       
       if (rows.length > 0) {
         res.json(rows[0]);
@@ -1320,6 +1469,8 @@ async function startServer() {
         res.json({
           company_id: parseInt(company_id),
           employee_id: parseInt(employee_id),
+          status: 'deactive',
+          auto_mode: 'off',
           is_enabled: false,
           screenshot_enabled: false,
           screenshot_interval: 10,
@@ -1330,37 +1481,44 @@ async function startServer() {
       const err = error as Error;
       console.error("Error fetching time tracking settings:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.put("/api/time-tracking/settings", async (req, res) => {
+    let connection;
     try {
-      const { company_id, employee_id, is_enabled, screenshot_enabled, screenshot_interval, idle_threshold } = req.body;
-      const connection = await db.getConnection();
+      const { company_id, employee_id, status, auto_mode, is_enabled, screenshot_enabled, screenshot_interval, idle_threshold } = req.body;
+      connection = await db.getConnection();
       
       await connection.query(`
-        INSERT INTO time_tracking_settings (company_id, employee_id, is_enabled, screenshot_enabled, screenshot_interval, idle_threshold)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO time_tracking_settings (company_id, employee_id, status, auto_mode, is_enabled, screenshot_enabled, screenshot_interval, idle_threshold)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
+          status = VALUES(status),
+          auto_mode = VALUES(auto_mode),
           is_enabled = VALUES(is_enabled),
           screenshot_enabled = VALUES(screenshot_enabled),
           screenshot_interval = VALUES(screenshot_interval),
           idle_threshold = VALUES(idle_threshold)
-      `, [company_id, employee_id, is_enabled, screenshot_enabled, screenshot_interval, idle_threshold]);
+      `, [company_id, employee_id, status || 'deactive', auto_mode || 'off', is_enabled || false, screenshot_enabled || false, screenshot_interval || 10, idle_threshold || 5]);
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error saving time tracking settings:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/time-tracking/sync", async (req, res) => {
+    let connection;
     try {
       const { company_id, employee_id, date, hour, active_minutes, idle_minutes, keystrokes, mouse_clicks } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       await connection.query(`
         INSERT INTO time_tracking_logs (company_id, employee_id, date, hour, active_minutes, idle_minutes, keystrokes, mouse_clicks)
@@ -1372,31 +1530,34 @@ async function startServer() {
           mouse_clicks = mouse_clicks + VALUES(mouse_clicks)
       `, [company_id, employee_id, date, hour, active_minutes || 0, idle_minutes || 0, keystrokes || 0, mouse_clicks || 0]);
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error syncing time tracking data:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/time-tracking/screenshot", async (req, res) => {
+    let connection;
     try {
       const { company_id, employee_id, image_data } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       await connection.query(
         "INSERT INTO time_tracking_screenshots (company_id, employee_id, image_data) VALUES (?, ?, ?)",
         [company_id, employee_id, image_data]
       );
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error saving screenshot:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -1427,36 +1588,39 @@ async function startServer() {
   });
 
   app.get("/api/time-tracking/screenshots/:company_id/:employee_id", async (req, res) => {
+    let connection;
     try {
       const { company_id, employee_id } = req.params;
       const { date } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       let query = "SELECT * FROM time_tracking_screenshots WHERE company_id = ? AND employee_id = ?";
       const params: (string | number)[] = [company_id, employee_id];
       
       if (date) {
         query += " AND DATE(timestamp) = ?";
-        params.push(date);
+        params.push(date as string);
       }
       
       query += " ORDER BY timestamp DESC";
       
       const [rows] = await connection.query(query, params);
-      connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching screenshots:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.get("/api/time-tracking/report/:company_id", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.params;
       const { start_date, end_date, employee_id } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       let query = `
         SELECT 
@@ -1475,23 +1639,24 @@ async function startServer() {
       
       if (start_date && end_date) {
         query += " AND l.date BETWEEN ? AND ?";
-        params.push(start_date, end_date);
+        params.push(start_date as string, end_date as string);
       }
       
       if (employee_id) {
         query += " AND l.employee_id = ?";
-        params.push(employee_id);
+        params.push(employee_id as string);
       }
       
       query += " GROUP BY l.employee_id, l.date ORDER BY l.date DESC, e.name ASC";
       
       const [rows] = await connection.query(query, params);
-      connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching time tracking report:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -1709,16 +1874,15 @@ async function startServer() {
   }
 
   app.get("/api/employees/hierarchy/:company_id", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.params;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       const [employees] = await connection.query(
         "SELECT id, name, email, employee_id, department, designation, manager_id, profile_picture FROM employees WHERE company_id = ? AND status = 'active'",
         [company_id]
       ) as [Employee[], unknown];
-      
-      connection.release();
       
       // Build tree structure
       const employeeMap = new Map<number, Employee>();
@@ -1741,26 +1905,30 @@ async function startServer() {
       const err = error as Error;
       console.error("Error fetching employee hierarchy:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.put("/api/employees/:id/manager", async (req, res) => {
+    let connection;
     try {
       const { id } = req.params;
       const { manager_id } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       await connection.query(
         "UPDATE employees SET manager_id = ? WHERE id = ?",
         [manager_id, id]
       );
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error updating employee manager:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -2078,24 +2246,26 @@ async function startServer() {
 
   // Employer Permissions API
   app.get("/api/employer-permissions", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       let query = "SELECT * FROM employer_permissions";
       const params: (string | number)[] = [];
       
       if (company_id) {
         query += " WHERE company_id = ?";
-        params.push(company_id);
+        params.push(company_id as string);
       }
       
       const [rows] = await connection.query(query, params);
-      connection.release();
       res.json(rows);
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error fetching permissions:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -2106,8 +2276,9 @@ async function startServer() {
       return res.status(400).json({ error: "Invalid data format" });
     }
 
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.beginTransaction();
 
       for (const perm of permissions) {
@@ -2120,24 +2291,27 @@ async function startServer() {
       }
 
       await connection.commit();
-      connection.release();
       res.json({ success: true, message: "Permissions saved successfully" });
     } catch (error: unknown) {
       const err = error as Error;
+      if (connection) await connection.rollback();
       console.error("Error saving permissions:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Company Admin Dashboard Stats
   app.get("/api/company-admin/dashboard-stats", async (req, res) => {
+    let connection;
     try {
       const { company_id } = req.query;
       if (!company_id) {
         return res.status(400).json({ error: "company_id is required" });
       }
       
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const today = new Date().toISOString().split('T')[0];
       
       // Total Employees
@@ -2163,7 +2337,7 @@ async function startServer() {
         "SELECT COUNT(*) as count FROM departments WHERE company_id = ?",
         [company_id]
       ) as [Record<string, unknown>[], unknown];
-
+ 
       // Attendance Trend (Last 7 days)
       const [trendResult] = await connection.query(`
         SELECT date, COUNT(DISTINCT employee_id) as count 
@@ -2172,7 +2346,7 @@ async function startServer() {
         GROUP BY date
         ORDER BY date ASC
       `, [company_id]) as [Record<string, unknown>[], unknown];
-
+ 
       // Recent Absentees (Employees who are not present today)
       const [absenteeResult] = await connection.query(`
         SELECT id, name, designation, department 
@@ -2183,8 +2357,6 @@ async function startServer() {
         )
         LIMIT 5
       `, [company_id, company_id, today]) as [Record<string, unknown>[], unknown];
-      
-      connection.release();
       
       res.json({
         totalEmployees: empResult[0].count as number,
@@ -2199,20 +2371,24 @@ async function startServer() {
       const err = error as Error;
       console.error("Error fetching dashboard stats:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Employer Attendance Daily Status
   app.get("/api/employer/attendance/daily", async (req, res) => {
+    let connection;
     try {
       const { company_id, date, search } = req.query;
       if (!company_id) return res.status(400).json({ error: "company_id is required" });
       
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       let query = `
-        SELECT a.*, DATE_FORMAT(a.date, '%Y-%m-%d') as date_str, e.name as employee_name 
+        SELECT a.*, DATE_FORMAT(a.date, '%Y-%m-%d') as date_str, e.name as employee_name, s.name as shift_name
         FROM attendance a 
         JOIN employees e ON a.employee_id = e.id 
+        LEFT JOIN shifts s ON a.shift_id = s.id
         WHERE a.company_id = ?
       `;
       const params: (string | number | string[] | undefined)[] = [company_id as string];
@@ -2230,21 +2406,24 @@ async function startServer() {
       query += " ORDER BY a.date DESC, a.check_in_time DESC";
       
       const [results] = await connection.query(query, params) as [Record<string, unknown>[], unknown];
-      connection.release();
       res.json(results);
     } catch (error: unknown) {
       const err = error as Error;
+      console.error("Error fetching daily attendance:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Employer Attendance Monthly Report
   app.get("/api/employer/attendance/monthly", async (req, res) => {
+    let connection;
     try {
       const { company_id, month, search } = req.query;
       if (!company_id) return res.status(400).json({ error: "company_id is required" });
       
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       let query = `
         SELECT 
           e.id as employee_id,
@@ -2274,21 +2453,24 @@ async function startServer() {
       query += " GROUP BY e.id, e.name";
       
       const [results] = await connection.query(query, params) as [Record<string, unknown>[], unknown];
-      connection.release();
       res.json(results);
     } catch (error: unknown) {
       const err = error as Error;
+      console.error("Error fetching monthly report:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Employer Attendance Working Hours Report
   app.get("/api/employer/attendance/working-hours", async (req, res) => {
+    let connection;
     try {
       const { company_id, employee_id, date, month } = req.query;
       if (!company_id) return res.status(400).json({ error: "company_id is required" });
       
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       // Trend Data (Last 7 days)
       const [trendResult] = await connection.query(`
@@ -2327,28 +2509,29 @@ async function startServer() {
 
       const [statsResult] = await connection.query(statsQuery, statsParams) as [Record<string, unknown>[], unknown];
       
-      connection.release();
-      
       res.json({
         trend: trendResult,
         stats: statsResult[0] || { total_hours: 0, avg_hours: 0, overtime_hours: 0 }
       });
     } catch (error: unknown) {
       const err = error as Error;
+      console.error("Error fetching working hours report:", err);
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Super Admin Stats
   app.get("/api/super-admin/stats", async (req, res) => {
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       const [totalResult] = await connection.query("SELECT COUNT(*) as count FROM companies") as [Record<string, unknown>[], unknown];
       const [activeResult] = await connection.query("SELECT COUNT(*) as count FROM companies WHERE status = 'active'") as [Record<string, unknown>[], unknown];
       const [expiredResult] = await connection.query("SELECT COUNT(*) as count FROM companies WHERE license_status = 'expired'") as [Record<string, unknown>[], unknown];
       
-      connection.release();
       res.json({
         totalCompanies: totalResult[0].count,
         activeCompanies: activeResult[0].count,
@@ -2357,6 +2540,32 @@ async function startServer() {
     } catch (error: unknown) {
       const err = error as Error;
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  // Super Admin Login
+  app.post("/api/super-admin/login", async (req, res) => {
+    const { email, password } = req.body;
+    let connection;
+    try {
+      connection = await db.getConnection();
+      const [admins] = await connection.query(
+        "SELECT * FROM admins WHERE email = ? AND password = ?",
+        [email, password]
+      ) as [Record<string, unknown>[], unknown];
+
+      if (admins.length > 0) {
+        res.json({ success: true, admin: admins[0] });
+      } else {
+        res.status(401).json({ success: false, message: "Invalid credentials" });
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -2364,13 +2573,13 @@ async function startServer() {
   app.post("/api/company-admin/login", async (req, res) => {
     console.log("Login attempt:", req.body);
     const { username, password } = req.body;
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [companies] = await connection.query(
         "SELECT * FROM companies WHERE admin_username = ? AND admin_password = ?",
         [username, password]
       ) as [Record<string, unknown>[], unknown];
-      connection.release();
 
       if (companies.length > 0) {
         res.json({ success: true, company: companies[0] });
@@ -2381,6 +2590,8 @@ async function startServer() {
       const err = error as Error;
       console.error("Login error:", err);
       res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -2392,13 +2603,13 @@ async function startServer() {
   // Employee Login
   app.post("/api/employee/login", async (req, res) => {
     const { username, password } = req.body;
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [employees] = await connection.query(
         "SELECT e.*, c.name as company_name FROM employees e JOIN companies c ON e.company_id = c.id WHERE e.username = ? AND e.password = ? AND e.status = 'active'",
         [username, password]
       ) as [Record<string, unknown>[], unknown];
-      connection.release();
 
       if (employees.length > 0) {
         res.json({ success: true, employee: employees[0] });
@@ -2408,6 +2619,8 @@ async function startServer() {
     } catch (error: unknown) {
       const err = error as Error;
       res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -2513,27 +2726,30 @@ async function startServer() {
 
   // List all invoices
   app.get("/api/invoices", async (req, res) => {
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [invoices] = await connection.query(`
         SELECT i.*, c.name as company_name, c.email as company_email 
         FROM invoices i 
         JOIN companies c ON i.company_id = c.id 
         ORDER BY i.created_at DESC
       `) as [Record<string, unknown>[], unknown];
-      connection.release();
       res.json(invoices);
     } catch (error: unknown) {
       const err = error as Error;
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Send invoice email
   app.post("/api/invoices/:id/send", async (req, res) => {
     const { id } = req.params;
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [invoice] = await connection.query(`
         SELECT i.*, c.name as company_name, c.email as company_email 
         FROM invoices i 
@@ -2542,7 +2758,6 @@ async function startServer() {
       `, [id]) as [Record<string, unknown>[], unknown];
       
       if (invoice.length === 0) {
-        connection.release();
         return res.status(404).json({ success: false, message: "Invoice not found" });
       }
 
@@ -2569,7 +2784,6 @@ async function startServer() {
         // Use Gmail API
         const client = getOAuth2Client();
         if (!client) {
-          connection.release();
           return res.status(400).json({ success: false, message: "Gmail OAuth not configured" });
         }
         client.setCredentials(tokens);
@@ -2621,7 +2835,6 @@ async function startServer() {
           ["gmail_sent_today", "1"]
         );
 
-        connection.release();
         return res.json({ success: true, message: `Invoice sent to ${companyEmail} via Gmail API` });
       } else {
         // Fallback to SMTP if configured
@@ -2649,10 +2862,8 @@ async function startServer() {
             `
           });
           
-          connection.release();
           return res.json({ success: true, message: `Invoice sent to ${companyEmail} via SMTP` });
         } else {
-          connection.release();
           return res.status(400).json({ success: false, message: "Email service not configured. Please connect Gmail or set SMTP settings." });
         }
       }
@@ -2660,19 +2871,23 @@ async function startServer() {
       const err = error as Error;
       console.error("Error sending invoice:", err);
       res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // List all companies
   app.get("/api/companies", async (req, res) => {
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [companies] = await connection.query("SELECT * FROM companies ORDER BY created_at DESC") as [Record<string, unknown>[], unknown];
-      connection.release();
       res.json(companies);
     } catch (error: unknown) {
       const err = error as Error;
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -2684,8 +2899,9 @@ async function startServer() {
       head_office_location, factory_location, 
       admin_username, admin_password, logo_url, plan 
     } = req.body;
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query(
         `UPDATE companies SET 
           name = ?, email = ?, mobile = ?, unique_code = ?, subsidiary = ?, 
@@ -2698,11 +2914,12 @@ async function startServer() {
           admin_username, admin_password, logo_url, plan, id
         ]
       );
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -2710,27 +2927,31 @@ async function startServer() {
   app.delete("/api/companies/:id", async (req, res) => {
     const { id } = req.params;
     console.log("Deleting company with ID:", id);
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query("DELETE FROM companies WHERE id = ?", [id]);
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // Recent Companies
   app.get("/api/super-admin/recent-companies", async (req, res) => {
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [companies] = await connection.query("SELECT * FROM companies ORDER BY created_at DESC LIMIT 5") as [Record<string, unknown>[], unknown];
-      connection.release();
       res.json(companies);
     } catch (error: unknown) {
       const err = error as Error;
       res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -2801,12 +3022,16 @@ async function startServer() {
       const { state, saveCreds } = await getAuthState(sessionDir);
       
       // Update status to connecting
-      const connectionDb = await db.getConnection();
-      await connectionDb.query(
-        "INSERT INTO whatsapp_accounts (company_id, status) VALUES (?, 'connecting') ON DUPLICATE KEY UPDATE status = 'connecting'",
-        [companyId]
-      );
-      connectionDb.release();
+      let connectionDb;
+      try {
+        connectionDb = await db.getConnection();
+        await connectionDb.query(
+          "INSERT INTO whatsapp_accounts (company_id, status) VALUES (?, 'connecting') ON DUPLICATE KEY UPDATE status = 'connecting'",
+          [companyId]
+        );
+      } finally {
+        if (connectionDb) connectionDb.release();
+      }
 
       const { version } = await fetchLatestBaileysVersion();
       console.log(`[WhatsApp] Using Baileys version ${version}`);
@@ -2839,12 +3064,16 @@ async function startServer() {
           sessions.delete(companyId);
           qrCodes.delete(companyId);
 
-          const connectionDb = await db.getConnection();
-          await connectionDb.query(
-            "UPDATE whatsapp_accounts SET status = 'disconnected' WHERE company_id = ?",
-            [companyId]
-          );
-          connectionDb.release();
+          let connectionDb;
+          try {
+            connectionDb = await db.getConnection();
+            await connectionDb.query(
+              "UPDATE whatsapp_accounts SET status = 'disconnected' WHERE company_id = ?",
+              [companyId]
+            );
+          } finally {
+            if (connectionDb) connectionDb.release();
+          }
 
           if (shouldReconnect) {
             console.log(`[WhatsApp] Reconnecting for company ${companyId}`);
@@ -2853,12 +3082,16 @@ async function startServer() {
         } else if (connection === "open") {
           console.log(`[WhatsApp] Connection opened for company ${companyId}`);
           qrCodes.delete(companyId);
-          const connectionDb = await db.getConnection();
-          await connectionDb.query(
-            "INSERT INTO whatsapp_accounts (company_id, status) VALUES (?, 'connected') ON DUPLICATE KEY UPDATE status = 'connected'",
-            [companyId]
-          );
-          connectionDb.release();
+          let connectionDb;
+          try {
+            connectionDb = await db.getConnection();
+            await connectionDb.query(
+              "INSERT INTO whatsapp_accounts (company_id, status) VALUES (?, 'connected') ON DUPLICATE KEY UPDATE status = 'connected'",
+              [companyId]
+            );
+          } finally {
+            if (connectionDb) connectionDb.release();
+          }
         }
       });
 
@@ -2876,13 +3109,13 @@ async function startServer() {
     const { companyId } = req.query;
     if (companyId === undefined || companyId === null) return res.status(400).json({ error: "Company ID required" });
 
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query(
         "SELECT status FROM whatsapp_accounts WHERE company_id = ?",
         [companyId]
       ) as [Record<string, unknown>[], unknown];
-      connection.release();
 
       const status = rows.length > 0 ? rows[0].status : "disconnected";
       const qr = qrCodes.get(Number(companyId)) || null;
@@ -2890,6 +3123,8 @@ async function startServer() {
       res.json({ status, qr });
     } catch {
       res.status(500).json({ error: "Failed to get status" });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -2910,6 +3145,7 @@ async function startServer() {
     const { companyId } = req.body;
     if (companyId === undefined || companyId === null) return res.status(400).json({ error: "Company ID required" });
 
+    let connection;
     try {
       const sock = sessions.get(Number(companyId));
       if (sock) {
@@ -2917,7 +3153,7 @@ async function startServer() {
         sessions.delete(companyId);
       }
 
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       await connection.query(
         "UPDATE whatsapp_accounts SET status = 'disconnected' WHERE company_id = ?",
         [companyId]
@@ -2929,10 +3165,11 @@ async function startServer() {
         fs.rmSync(sessionDir, { recursive: true, force: true });
       }
 
-      connection.release();
       res.json({ success: true });
     } catch {
       res.status(500).json({ error: "Failed to disconnect" });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -2943,6 +3180,7 @@ async function startServer() {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    let connection;
     try {
       const sock = sessions.get(Number(company_id));
       if (!sock) {
@@ -2956,14 +3194,13 @@ async function startServer() {
       }
 
       // Rate limiting: check messages in last minute
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [recentRows] = await connection.query(
         "SELECT COUNT(*) as count FROM whatsapp_messages WHERE company_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 MINUTE)",
         [company_id]
       ) as [Record<string, unknown>[], unknown];
 
       if (recentRows[0].count as number >= 20) {
-        connection.release();
         return res.status(429).json({ error: "Rate limit exceeded (max 20 msgs/min)" });
       }
 
@@ -2979,18 +3216,18 @@ async function startServer() {
           [company_id, to_number, message, JSON.stringify(sentMsg)]
         );
 
-        connection.release();
         res.json({ success: true, message: "Message sent" });
       } catch (sendError) {
         await connection.query(
           "INSERT INTO whatsapp_messages (company_id, to_number, message, status, response_log) VALUES (?, ?, ?, 'failed', ?)",
           [company_id, to_number, message, JSON.stringify(sendError)]
         );
-        connection.release();
         res.status(500).json({ error: "Failed to send message", details: sendError });
       }
     } catch {
       res.status(500).json({ error: "Internal server error" });
+    } finally {
+      if (connection) connection.release();
     }
   });
   const getOAuth2Client = () => {
@@ -3071,9 +3308,10 @@ async function startServer() {
       client.redirectUri = `${protocol}://${host}/api/gmail/callback`;
     }
 
+    let connection;
     try {
       const { tokens } = await client.getToken(code as string);
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       if (companyId) {
         // Save tokens for a specific company
@@ -3088,8 +3326,6 @@ async function startServer() {
           ["gmail_tokens", JSON.stringify(tokens), JSON.stringify(tokens)]
         );
       }
-      
-      connection.release();
       
       // Redirect back to the appropriate page
       let redirectPath = '/super-admin/gmail';
@@ -3118,13 +3354,16 @@ async function startServer() {
     } catch (error) {
       console.error("Gmail Auth Error:", error);
       res.status(500).send("Authentication failed. Please try again.");
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.get("/api/gmail/status", async (req, res) => {
     const { companyId } = req.query;
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       let connected = false;
       let lastSync = null;
 
@@ -3140,8 +3379,6 @@ async function startServer() {
       
       const [sentTodayRows] = await connection.query("SELECT setting_value FROM settings WHERE setting_key = 'gmail_sent_today'") as [Record<string, unknown>[], unknown];
       
-      connection.release();
-      
       res.json({
         connected,
         sentToday: sentTodayRows.length > 0 ? parseInt(sentTodayRows[0].setting_value as string) : 0,
@@ -3149,23 +3386,24 @@ async function startServer() {
       });
     } catch {
       res.status(500).json({ connected: false });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/gmail/send-test", async (req, res) => {
+    let connection;
     try {
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       const [rows] = await connection.query("SELECT * FROM settings WHERE setting_key = 'gmail_tokens'") as [Record<string, unknown>[], unknown];
       
       if (rows.length === 0) {
-        connection.release();
         return res.status(401).json({ success: false, message: "Gmail not connected" });
       }
 
       const tokens = JSON.parse(rows[0].setting_value as string);
       const client = getOAuth2Client();
       if (!client) {
-        connection.release();
         return res.status(400).json({ success: false, message: "Gmail OAuth not configured" });
       }
       client.setCredentials(tokens);
@@ -3213,23 +3451,24 @@ async function startServer() {
         ["gmail_sent_today", "1"]
       );
 
-      connection.release();
       res.json({ success: true });
     } catch (error) {
       console.error("Gmail Send Error:", error);
       res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   // SMTP Settings Endpoints
   app.get("/api/smtp/settings", async (req, res) => {
+    let connection;
     try {
       const companyId = req.query.companyId as string;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       if (companyId === 'global') {
         const [rows] = await connection.query("SELECT setting_value FROM settings WHERE setting_key = 'smtp_config'") as [Record<string, unknown>[], unknown];
-        connection.release();
         if (rows.length > 0) {
           res.json(JSON.parse(rows[0].setting_value as string));
         } else {
@@ -3237,7 +3476,6 @@ async function startServer() {
         }
       } else {
         const [rows] = await connection.query("SELECT smtp_settings FROM companies WHERE id = ?", [companyId]) as [Record<string, unknown>[], unknown];
-        connection.release();
         if (rows.length > 0 && rows[0].smtp_settings) {
           res.json(JSON.parse(rows[0].smtp_settings as string));
         } else {
@@ -3246,13 +3484,16 @@ async function startServer() {
       }
     } catch (error: unknown) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
   app.post("/api/smtp/settings", async (req, res) => {
+    let connection;
     try {
       const { companyId, settings } = req.body;
-      const connection = await db.getConnection();
+      connection = await db.getConnection();
       
       if (companyId === 'global') {
         await connection.query(
@@ -3266,10 +3507,11 @@ async function startServer() {
         );
       }
       
-      connection.release();
       res.json({ success: true });
     } catch (error: unknown) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -3299,6 +3541,119 @@ async function startServer() {
       res.json({ success: true });
     } catch (error: unknown) {
       res.status(500).json({ success: false, message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Employer Settings Routes
+  app.get('/api/employer/settings/shifts', async (req, res) => {
+    try {
+      const [rows] = await db.query('SELECT * FROM shifts') as [Record<string, unknown>[], unknown];
+      const formattedShifts = rows.map(row => {
+        const r = row as Record<string, unknown>;
+        return {
+          id: String(r.id),
+          name: r.name,
+          startTime: String(r.start_time).substring(0, 5),
+          endTime: String(r.end_time).substring(0, 5),
+          breakTime: r.break_time,
+          gracePeriod: r.grace_period,
+          minWorkingHours: r.min_working_hours,
+          lateMarkRule: r.late_mark_rule,
+          status: r.status
+        };
+      });
+      res.json(formattedShifts);
+    } catch (error) {
+      console.error('Error fetching shifts:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.post('/api/employer/settings/shifts', async (req, res) => {
+    try {
+      console.log('Received shift update request:', req.body);
+      const shift = req.body;
+      await db.query(
+        'UPDATE shifts SET name = ?, start_time = ?, end_time = ?, break_time = ?, grace_period = ?, min_working_hours = ?, late_mark_rule = ?, status = ? WHERE id = ?',
+        [shift.name, shift.startTime, shift.endTime, shift.breakTime, shift.gracePeriod, shift.minWorkingHours, shift.lateMarkRule, shift.status, shift.id]
+      );
+      console.log(`Shift ${shift.name} updated successfully in database.`);
+      res.json({ message: 'Shift updated successfully' });
+    } catch (error) {
+      console.error('Error updating shift:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/employer/settings/rules', async (req, res) => {
+    try {
+      const [rows] = await db.query('SELECT business_rules FROM companies LIMIT 1') as [ { business_rules: string }[], unknown];
+      if (rows.length > 0 && rows[0].business_rules) {
+        res.json(JSON.parse(rows[0].business_rules));
+      } else {
+        res.json({
+          language: 'English',
+          currency: 'USD',
+          timeZone: 'UTC',
+          timeFormat: '24h',
+          taxRate: 0,
+          vatRate: 0,
+          customField: ''
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching rules:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.post('/api/employer/settings/rules', async (req, res) => {
+    try {
+      const rules = req.body;
+      await db.query('UPDATE companies SET business_rules = ? LIMIT 1', [JSON.stringify(rules)]);
+      res.json({ message: 'Rules saved successfully' });
+    } catch (error) {
+      console.error('Error saving rules:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/employer/settings/profile', async (req, res) => {
+    try {
+      console.log('Fetching company profile...');
+      const [rows] = await db.query('SELECT name, email, mobile as phone, website, about, head_office_location, factory_location, logo_url FROM companies LIMIT 1') as [ Record<string, unknown>[], unknown];
+      if (rows.length > 0) {
+        console.log('Profile fetched successfully:', rows[0]);
+        res.json(rows[0]);
+      } else {
+        console.warn('No company found in database.');
+        res.status(404).json({ error: 'Company not found' });
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.post('/api/employer/settings/profile', async (req, res) => {
+    try {
+      console.log('Received profile update request:', req.body);
+      const { name, email, phone, website, about, head_office_location, factory_location, logo_url } = req.body;
+      
+      // Validation
+      if (!name || !email) {
+        return res.status(400).json({ error: 'Name and Email are required' });
+      }
+
+      await db.query(
+        'UPDATE companies SET name = ?, email = ?, mobile = ?, website = ?, about = ?, head_office_location = ?, factory_location = ?, logo_url = ? LIMIT 1',
+        [name, email, phone, website, about, head_office_location, factory_location, logo_url]
+      );
+      console.log('Profile updated successfully in database.');
+      res.json({ message: 'Profile saved successfully' });
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -3357,105 +3712,5 @@ async function startServer() {
     }
   });
 }
-
-// Employer Settings Routes
-app.get('/api/employer/settings/shifts', async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT * FROM shifts') as [Record<string, unknown>[], unknown];
-    const formattedShifts = rows.map(row => {
-      const r = row as Record<string, unknown>;
-      return {
-        id: String(r.id),
-        name: r.name,
-        startTime: String(r.start_time).substring(0, 5),
-        endTime: String(r.end_time).substring(0, 5),
-        breakTime: r.break_time,
-        gracePeriod: r.grace_period,
-        minWorkingHours: r.min_working_hours,
-        lateMarkRule: r.late_mark_rule,
-        status: r.status
-      };
-    });
-    res.json(formattedShifts);
-  } catch (error) {
-    console.error('Error fetching shifts:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/employer/settings/shifts', async (req, res) => {
-  try {
-    const shift = req.body;
-    await pool.query(
-      'UPDATE shifts SET start_time = ?, end_time = ?, break_time = ?, grace_period = ?, min_working_hours = ?, late_mark_rule = ?, status = ? WHERE id = ?',
-      [shift.startTime, shift.endTime, shift.breakTime, shift.gracePeriod, shift.minWorkingHours, shift.lateMarkRule, shift.status, shift.id]
-    );
-    res.json({ message: 'Shift updated successfully' });
-  } catch (error) {
-    console.error('Error updating shift:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.get('/api/employer/settings/rules', async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT business_rules FROM companies LIMIT 1') as [ { business_rules: string }[], unknown];
-    if (rows.length > 0 && rows[0].business_rules) {
-      res.json(JSON.parse(rows[0].business_rules));
-    } else {
-      res.json({
-        language: 'English',
-        currency: 'USD',
-        timeZone: 'UTC',
-        timeFormat: '24h',
-        taxRate: 0,
-        vatRate: 0,
-        customField: ''
-      });
-    }
-  } catch (error) {
-    console.error('Error fetching rules:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/employer/settings/rules', async (req, res) => {
-  try {
-    const rules = req.body;
-    await pool.query('UPDATE companies SET business_rules = ? LIMIT 1', [JSON.stringify(rules)]);
-    res.json({ message: 'Rules saved successfully' });
-  } catch (error) {
-    console.error('Error saving rules:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.get('/api/employer/settings/profile', async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT name, email, mobile, head_office_location, factory_location, logo_url FROM companies LIMIT 1') as [ unknown[], unknown];
-    if (rows.length > 0) {
-      res.json(rows[0]);
-    } else {
-      res.status(404).json({ error: 'Company not found' });
-    }
-  } catch (error) {
-    console.error('Error fetching profile:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/employer/settings/profile', async (req, res) => {
-  try {
-    const { name, email, mobile, head_office_location, factory_location, logo_url } = req.body;
-    await pool.query(
-      'UPDATE companies SET name = ?, email = ?, mobile = ?, head_office_location = ?, factory_location = ?, logo_url = ? LIMIT 1',
-      [name, email, mobile, head_office_location, factory_location, logo_url]
-    );
-    res.json({ message: 'Profile saved successfully' });
-  } catch (error) {
-    console.error('Error saving profile:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
 startServer();

@@ -15,7 +15,9 @@ export default function Settings() {
     email: 'support@acmecorp.com',
     phone: '+1 234 567 890',
     about: 'Tell us about your company...',
-    addresses: [] as string[]
+    head_office_location: '',
+    factory_location: '',
+    logo_url: ''
   });
 
   const [rules, setRules] = useState({
@@ -28,34 +30,38 @@ export default function Settings() {
     timeFormat: '24h' // '12h' or '24h'
   });
 
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const [profileRes, rulesRes, shiftsRes] = await Promise.all([
-          fetch('/api/employer/settings/profile'),
-          fetch('/api/employer/settings/rules'),
-          fetch('/api/employer/settings/shifts')
-        ]);
+  const fetchSettings = async () => {
+    try {
+      console.log('Fetching all settings from database...');
+      const [profileRes, rulesRes, shiftsRes] = await Promise.all([
+        fetch('/api/employer/settings/profile'),
+        fetch('/api/employer/settings/rules'),
+        fetch('/api/employer/settings/shifts')
+      ]);
 
-        if (profileRes.ok) {
-          const profileData = await profileRes.json();
-          setCompanyProfile(profileData);
-        }
-
-        if (rulesRes.ok) {
-          const rulesData = await rulesRes.json();
-          setRules(rulesData);
-        }
-
-        if (shiftsRes.ok) {
-          const shiftsData = await shiftsRes.json();
-          setShifts(shiftsData);
-        }
-      } catch (error) {
-        console.error('Error fetching settings:', error);
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        console.log('Profile data loaded:', profileData);
+        setCompanyProfile(profileData);
       }
-    };
 
+      if (rulesRes.ok) {
+        const rulesData = await rulesRes.json();
+        console.log('Rules data loaded:', rulesData);
+        setRules(rulesData);
+      }
+
+      if (shiftsRes.ok) {
+        const shiftsData = await shiftsRes.json();
+        console.log('Shifts data loaded:', shiftsData);
+        setShifts(shiftsData);
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  };
+
+  useEffect(() => {
     fetchSettings();
   }, []);
 
@@ -531,15 +537,20 @@ export default function Settings() {
 
   const handleSaveProfile = async () => {
     try {
+      console.log('Attempting to save company profile:', companyProfile);
       const response = await fetch('/api/employer/settings/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(companyProfile),
       });
       if (response.ok) {
+        console.log('Profile saved successfully.');
         alert('Company profile saved successfully!');
+        await fetchSettings(); // Reload data to confirm persistence
       } else {
-        alert('Failed to save company profile.');
+        const errData = await response.json();
+        console.error('Failed to save profile:', errData);
+        alert(`Failed to save company profile: ${errData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -549,15 +560,20 @@ export default function Settings() {
 
   const handleSaveRules = async () => {
     try {
+      console.log('Attempting to save business rules:', rules);
       const response = await fetch('/api/employer/settings/rules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(rules),
       });
       if (response.ok) {
+        console.log('Rules saved successfully.');
         alert('Rules saved successfully!');
+        await fetchSettings(); // Reload data to confirm persistence
       } else {
-        alert('Failed to save rules.');
+        const errData = await response.json();
+        console.error('Failed to save rules:', errData);
+        alert(`Failed to save rules: ${errData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error saving rules:', error);
@@ -567,15 +583,20 @@ export default function Settings() {
 
   const handleSaveShift = async (shift: Shift) => {
     try {
+      console.log(`Attempting to save shift ${shift.name}:`, shift);
       const response = await fetch('/api/employer/settings/shifts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(shift),
       });
       if (response.ok) {
+        console.log(`Shift ${shift.name} saved successfully.`);
         alert(`${shift.name} shift updated successfully!`);
+        await fetchSettings(); // Reload data to confirm persistence
       } else {
-        alert('Failed to update shift.');
+        const errData = await response.json();
+        console.error(`Failed to update shift ${shift.name}:`, errData);
+        alert(`Failed to update shift: ${errData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error updating shift:', error);
@@ -605,24 +626,32 @@ export default function Settings() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Company Name</label>
-            <input type="text" value={companyProfile.name} onChange={e => setCompanyProfile({...companyProfile, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            <input type="text" value={companyProfile.name || ''} onChange={e => setCompanyProfile({...companyProfile, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Website</label>
-            <input type="text" value={companyProfile.website} onChange={e => setCompanyProfile({...companyProfile, website: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            <input type="text" value={companyProfile.website || ''} onChange={e => setCompanyProfile({...companyProfile, website: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Official Email</label>
-            <input type="email" value={companyProfile.email} onChange={e => setCompanyProfile({...companyProfile, email: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            <input type="email" value={companyProfile.email || ''} onChange={e => setCompanyProfile({...companyProfile, email: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Phone Number</label>
-            <input type="tel" value={companyProfile.phone} onChange={e => setCompanyProfile({...companyProfile, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            <input type="tel" value={companyProfile.phone || ''} onChange={e => setCompanyProfile({...companyProfile, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Head Office Location</label>
+            <input type="text" value={companyProfile.head_office_location || ''} onChange={e => setCompanyProfile({...companyProfile, head_office_location: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Factory Location</label>
+            <input type="text" value={companyProfile.factory_location || ''} onChange={e => setCompanyProfile({...companyProfile, factory_location: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
           </div>
         </div>
         <div className="space-y-2">
           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">About Us</label>
-          <textarea value={companyProfile.about} onChange={e => setCompanyProfile({...companyProfile, about: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" rows={4} />
+          <textarea value={companyProfile.about || ''} onChange={e => setCompanyProfile({...companyProfile, about: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" rows={4} />
         </div>
       </section>
 
@@ -637,7 +666,7 @@ export default function Settings() {
              <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Languages</h3>
              <input 
                type="text" 
-               value={rules.activeLanguage} 
+               value={rules.activeLanguage || ''} 
                onChange={e => setRules({...rules, activeLanguage: e.target.value})} 
                placeholder="e.g. English (en)"
                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" 
@@ -648,7 +677,7 @@ export default function Settings() {
              <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Currencies</h3>
              <input 
                type="text" 
-               value={rules.activeCurrency} 
+               value={rules.activeCurrency || ''} 
                onChange={e => setRules({...rules, activeCurrency: e.target.value})} 
                placeholder="e.g. US Dollar ($)"
                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" 
@@ -658,7 +687,7 @@ export default function Settings() {
           <div className="space-y-4">
             <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Time Zone</h3>
             <select 
-              value={rules.timeZone} 
+              value={rules.timeZone || 'UTC'} 
               onChange={e => setRules({...rules, timeZone: e.target.value})} 
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
@@ -696,19 +725,19 @@ export default function Settings() {
 
           <div className="space-y-4">
             <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Tax Rate (%)</h3>
-            <input type="number" value={rules.taxRate} onChange={e => setRules({...rules, taxRate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            <input type="number" value={rules.taxRate || '0'} onChange={e => setRules({...rules, taxRate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
           </div>
 
           <div className="space-y-4">
             <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">VAT Rate (%)</h3>
-            <input type="number" value={rules.vatRate} onChange={e => setRules({...rules, vatRate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            <input type="number" value={rules.vatRate || '0'} onChange={e => setRules({...rules, vatRate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
           </div>
 
           <div className="space-y-4 md:col-span-2">
             <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Custom Field</h3>
             <input 
               type="text" 
-              value={rules.customField} 
+              value={rules.customField || ''} 
               onChange={e => setRules({...rules, customField: e.target.value})} 
               placeholder="Enter custom business rule or metadata..."
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" 
@@ -726,39 +755,48 @@ export default function Settings() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {shifts.map((shift) => {
             const metrics = calculateShiftMetrics(shift);
+            const isActive = shift.status === 'Active';
+            
             return (
-              <div key={shift.id} className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4">
+              <div key={shift.id} className={`bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4 transition-all ${!isActive ? 'opacity-60 grayscale-[0.5]' : ''}`}>
                 <div className="flex justify-between items-center">
-                  <h3 className="text-sm font-black text-slate-900 uppercase">{shift.name} Shift</h3>
                   <div className="flex items-center gap-3">
+                    <h3 className="text-sm font-black text-slate-900 uppercase">{shift.name} Shift</h3>
+                    <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
+                      isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                    }`}>
+                      {shift.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => updateShift(shift.id, 'status', shift.status === 'Active' ? 'Deactive' : 'Active')}
-                      className={`px-3 py-1 rounded-full text-[10px] font-black uppercase transition-all ${
-                        shift.status === 'Active' 
-                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' 
-                        : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                      onClick={() => updateShift(shift.id, 'status', isActive ? 'Deactive' : 'Active')}
+                      className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm ${
+                        isActive 
+                        ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200' 
+                        : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
                       }`}
                     >
-                      {shift.status}
+                      {isActive ? 'Deactivate' : 'Activate'}
                     </button>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase">Start Time</label>
-                    <input type="time" value={shift.startTime} onChange={e => updateShift(shift.id, 'startTime', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" />
+                    <input type="time" value={shift.startTime || ''} onChange={e => updateShift(shift.id, 'startTime', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase">End Time</label>
-                    <input type="time" value={shift.endTime} onChange={e => updateShift(shift.id, 'endTime', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" />
+                    <input type="time" value={shift.endTime || ''} onChange={e => updateShift(shift.id, 'endTime', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase">Break (min)</label>
-                    <input type="number" value={shift.breakTime} onChange={e => updateShift(shift.id, 'breakTime', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" />
+                    <input type="number" value={shift.breakTime || 0} onChange={e => updateShift(shift.id, 'breakTime', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase">Grace (min)</label>
-                    <input type="number" value={shift.gracePeriod} onChange={e => updateShift(shift.id, 'gracePeriod', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" />
+                    <input type="number" value={shift.gracePeriod || 0} onChange={e => updateShift(shift.id, 'gracePeriod', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
                   </div>
                 </div>
                 <div className="pt-4 border-t border-slate-200 grid grid-cols-3 gap-4 text-center">
@@ -779,7 +817,7 @@ export default function Settings() {
                   <p className="text-xs font-bold text-slate-600">Overtime: <span className="font-black text-rose-600">{metrics.overtime}h</span></p>
                   <button 
                     onClick={() => handleSaveShift(shift)}
-                    className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all"
+                    className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Save Shift
                   </button>

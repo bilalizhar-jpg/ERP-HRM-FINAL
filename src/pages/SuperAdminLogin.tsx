@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Home, Lock, User } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -8,6 +8,13 @@ export default function SuperAdminLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  
+  useEffect(() => {
+    const superAdminData = localStorage.getItem('superAdmin');
+    if (superAdminData) {
+      navigate('/super-admin/dashboard');
+    }
+  }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,6 +27,7 @@ export default function SuperAdminLogin() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        localStorage.setItem('superAdmin', JSON.stringify(data.admin));
         navigate('/super-admin/dashboard');
       } else {
         setError(data.message || 'Invalid username or password');
@@ -105,7 +113,7 @@ export default function SuperAdminLogin() {
                 <User size={20} />
               </div>
               <input
-                type="email"
+                type="text"
                 placeholder="Email Address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

@@ -44,7 +44,7 @@ interface AttendanceModuleProps {
 export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('Attendance form');
   
   // Form State
@@ -69,6 +69,7 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
 
   useEffect(() => {
     const fetchEmployees = async () => {
+      setLoading(true);
       try {
         const res = await fetch(`/api/employees?company_id=${companyId}`);
         if (res.ok) {
@@ -77,6 +78,8 @@ export default function AttendanceModule({ companyId }: AttendanceModuleProps) {
         }
       } catch (error) {
         console.error("Error fetching employees:", error);
+      } finally {
+        setLoading(false);
       }
     };
     fetchEmployees();
