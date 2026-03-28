@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Clock, Search, MousePointer2, Keyboard,
-  Activity, Image as ImageIcon, X, AlertCircle, Coffee
+  Activity, Image as ImageIcon, X, AlertCircle, Coffee,
+  UserPlus, ToggleLeft, ToggleRight, Save, Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -35,6 +36,16 @@ interface TrackingSettings {
   screenshot_enabled: boolean;
   screenshot_interval: number;
   idle_threshold: number;
+  status?: 'active' | 'deactive';
+  auto_mode?: 'on' | 'off';
+}
+
+interface TimeTrackingSetting {
+  company_id: number;
+  employee_id: number;
+  employee_name?: string;
+  status: 'active' | 'deactive';
+  auto_mode: 'on' | 'off';
 }
 
 export default function CompanyAdminTimeTracking() {
@@ -53,8 +64,15 @@ export default function CompanyAdminTimeTracking() {
   });
   
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'logs' | 'screenshots' | 'settings'>('logs');
+  const [activeTab, setActiveTab] = useState<'logs' | 'screenshots' | 'settings' | 'rules'>('logs');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  // Rules state
+  const [settingsList, setSettingsList] = useState<TimeTrackingSetting[]>([]);
+  const [ruleEmployeeId, setRuleEmployeeId] = useState<string>('');
+  const [ruleStatus, setRuleStatus] = useState<'active' | 'deactive'>('deactive');
+  const [ruleAutoMode, setRuleAutoMode] = useState<'on' | 'off'>('off');
+  const [savingRule, setSavingRule] = useState(false);
 
   const companyAdmin = JSON.parse(localStorage.getItem('companyAdmin') || '{}');
 
@@ -81,6 +99,23 @@ export default function CompanyAdminTimeTracking() {
       console.error("Error fetching employees:", error);
     }
   };
+
+  const fetchSettingsList = useCallback(async () => {
+    if (!companyAdmin.id) return;
+    try {
+      const response = await fetch(`/api/time-tracking/settings/${companyAdmin.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSettingsList(data);
+      }
+    } catch (error) {
+      console.error('Error fetching settings list:', error);
+    }
+  }, [companyAdmin.id]);
+
+  useEffect(() => {
+    fetchSettingsList();
+  }, [fetchSettingsList]);
 
   const fetchData = useCallback(async () => {
     if (!selectedEmployee) return;
@@ -123,15 +158,57 @@ export default function CompanyAdminTimeTracking() {
         body: JSON.stringify({
           company_id: companyAdmin.id,
           employee_id: selectedEmployee,
-          ...settings
+          ...settings,
+          status: settings.is_enabled ? 'active' : 'deactive'
         })
       });
       if (res.ok) {
         alert('Settings saved successfully');
+        fetchSettingsList();
       }
     } catch (error) {
       console.error("Error saving settings:", error);
       alert('Failed to save settings');
+    }
+  };
+
+  const handleSaveRule = async () => {
+    if (!companyAdmin.id || !ruleEmployeeId) {
+      alert('Please select an employee');
+      return;
+    }
+
+    try {
+      setSavingRule(true);
+      const response = await fetch('/api/time-tracking/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          company_id: parseInt(companyAdmin.id),
+          employee_id: parseInt(ruleEmployeeId),
+          status: ruleStatus,
+          auto_mode: ruleAutoMode,
+          is_enabled: ruleStatus === 'active'
+        }),
+      });
+
+      if (response.ok) {
+        alert('Rule saved successfully');
+        fetchSettingsList();
+        // Reset form
+        setRuleEmployeeId('');
+        setRuleStatus('deactive');
+        setRuleAutoMode('off');
+      } else {
+        alert('Failed to save rule');
+      }
+    } catch (error) {
+      console.error('Error saving rule:', error);
+      alert('Error saving rule');
+    } finally {
+      setSavingRule(false);
     }
   };
 
@@ -242,6 +319,14 @@ export default function CompanyAdminTimeTracking() {
             }`}
           >
             Settings
+          </button>
+          <button
+            onClick={() => setActiveTab('rules')}
+            className={`flex-1 py-6 text-sm font-black uppercase tracking-widest transition-colors ${
+              activeTab === 'rules' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/30' : 'text-slate-400 hover:bg-slate-50'
+            }`}
+          >
+            Tracking Rules
           </button>
         </div>
 
@@ -391,7 +476,7 @@ export default function CompanyAdminTimeTracking() {
                           type="number" 
                           min="1"
                           max="60"
-                          value={settings.screenshot_interval}
+                          value={settings.screenshot_interval || 10}
                           onChange={(e) => setSettings({...settings, screenshot_interval: Number(e.target.value)})}
                           disabled={!settings.screenshot_enabled}
                           className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 outline-none disabled:opacity-50"
@@ -405,7 +490,7 @@ export default function CompanyAdminTimeTracking() {
                           type="number" 
                           min="1"
                           max="60"
-                          value={settings.idle_threshold}
+                          value={settings.idle_threshold || 5}
                           onChange={(e) => setSettings({...settings, idle_threshold: Number(e.target.value)})}
                           disabled={!settings.is_enabled}
                           className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-600 outline-none disabled:opacity-50"
@@ -421,6 +506,126 @@ export default function CompanyAdminTimeTracking() {
                     >
                       Save Settings
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Rules Tab */}
+              {activeTab === 'rules' && (
+                <div className="space-y-8">
+                  {/* Add Rule Section */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div className="flex items-center gap-2 mb-6">
+                      <UserPlus className="w-5 h-5 text-blue-600" />
+                      <h2 className="text-lg font-semibold text-gray-900">Add Time Tracking Rule</h2>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Select Employee</label>
+                        <select 
+                          value={ruleEmployeeId}
+                          onChange={(e) => setRuleEmployeeId(e.target.value)}
+                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        >
+                          <option value="">Choose an employee...</option>
+                          {employees.map(emp => (
+                            <option key={emp.id} value={emp.id}>{emp.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                          <button 
+                            onClick={() => setRuleStatus('active')}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${ruleStatus === 'active' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                          >
+                            Active
+                          </button>
+                          <button 
+                            onClick={() => setRuleStatus('deactive')}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${ruleStatus === 'deactive' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                          >
+                            Deactive
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Auto Mode</label>
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                          <button 
+                            onClick={() => setRuleAutoMode('on')}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${ruleAutoMode === 'on' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                          >
+                            Auto ON
+                          </button>
+                          <button 
+                            onClick={() => setRuleAutoMode('off')}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${ruleAutoMode === 'off' ? 'bg-white text-gray-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                          >
+                            Auto OFF
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-3 flex justify-end">
+                        <button 
+                          onClick={handleSaveRule}
+                          disabled={savingRule}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        >
+                          {savingRule ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          Save Rule
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rules List */}
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="p-6 border-b border-gray-100">
+                      <h2 className="text-lg font-semibold text-gray-900">Configured Rules</h2>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="bg-gray-50 border-b border-gray-100">
+                            <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest">Employee</th>
+                            <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest">Status</th>
+                            <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest">Tracking Mode</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {settingsList.length === 0 ? (
+                            <tr>
+                              <td colSpan={3} className="px-6 py-8 text-center text-sm text-gray-500">No rules configured yet.</td>
+                            </tr>
+                          ) : (
+                            settingsList.map((setting, idx) => (
+                              <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                <td className="px-6 py-4">
+                                  <span className="text-sm font-bold text-gray-900">{setting.employee_name}</span>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${setting.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                    {setting.status === 'active' ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
+                                    {setting.status}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${setting.auto_mode === 'on' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                                    {setting.auto_mode === 'on' ? 'Automatic' : 'Manual'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )}

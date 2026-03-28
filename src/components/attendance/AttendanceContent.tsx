@@ -376,7 +376,7 @@ export default function AttendanceContent() {
                   <label className="text-xs font-bold text-slate-700">Employee *</label>
                   <select 
                     name="employee_id"
-                    value={formData.employee_id}
+                    value={formData.employee_id || ''}
                     onChange={handleFormChange}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -392,7 +392,7 @@ export default function AttendanceContent() {
                   <input 
                     type="date" 
                     name="date"
-                    value={formData.date}
+                    value={formData.date || ''}
                     onChange={handleFormChange}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" 
@@ -403,7 +403,7 @@ export default function AttendanceContent() {
                   <input 
                     type="time" 
                     name="check_in"
-                    value={formData.check_in}
+                    value={formData.check_in || ''}
                     onChange={handleFormChange}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" 
@@ -414,7 +414,7 @@ export default function AttendanceContent() {
                   <input 
                     type="time" 
                     name="check_out"
-                    value={formData.check_out}
+                    value={formData.check_out || ''}
                     onChange={handleFormChange}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" 
@@ -425,7 +425,7 @@ export default function AttendanceContent() {
                   <input 
                     type="number" 
                     name="break_time"
-                    value={formData.break_time}
+                    value={formData.break_time || 0}
                     onChange={handleFormChange}
                     className="w-full px-3 py-2 border border-slate-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" 
                   />
@@ -434,7 +434,7 @@ export default function AttendanceContent() {
                   <label className="text-xs font-bold text-slate-700">Shift *</label>
                   <select 
                     name="shift_id"
-                    value={formData.shift_id}
+                    value={formData.shift_id || ''}
                     onChange={handleFormChange}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -449,7 +449,7 @@ export default function AttendanceContent() {
                   <label className="text-xs font-bold text-slate-700">Status</label>
                   <select 
                     name="status"
-                    value={formData.status}
+                    value={formData.status || ''}
                     onChange={handleFormChange}
                     className="w-full px-3 py-2 border border-slate-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
@@ -503,7 +503,7 @@ export default function AttendanceContent() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <select 
                   className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
-                  value={dailyFilters.search}
+                  value={dailyFilters.search || ''}
                   onChange={(e) => setDailyFilters({...dailyFilters, search: e.target.value})}
                 >
                   <option value="">All Employees</option>
@@ -518,7 +518,7 @@ export default function AttendanceContent() {
               <input 
                 type="date" 
                 className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                value={dailyFilters.date}
+                value={dailyFilters.date || ''}
                 onChange={(e) => setDailyFilters({...dailyFilters, date: e.target.value})}
               />
             </div>
@@ -622,7 +622,7 @@ export default function AttendanceContent() {
                   type="text" 
                   placeholder="Type employee name..." 
                   className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  value={monthlyFilters.search}
+                  value={monthlyFilters.search || ''}
                   onChange={(e) => setMonthlyFilters({...monthlyFilters, search: e.target.value})}
                 />
               </div>
@@ -632,7 +632,7 @@ export default function AttendanceContent() {
               <input 
                 type="month" 
                 className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                value={monthlyFilters.month}
+                value={monthlyFilters.month || ''}
                 onChange={(e) => setMonthlyFilters({...monthlyFilters, month: e.target.value})}
               />
             </div>
@@ -710,7 +710,7 @@ export default function AttendanceContent() {
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Select Employee</label>
                 <select 
                   className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  value={workingHoursFilters.employee_id}
+                  value={workingHoursFilters.employee_id || ''}
                   onChange={(e) => setWorkingHoursFilters({...workingHoursFilters, employee_id: e.target.value})}
                 >
                   <option value="All Employees">All Employees</option>
@@ -730,7 +730,7 @@ export default function AttendanceContent() {
                 <input 
                   type="date" 
                   className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  value={workingHoursFilters.date}
+                  value={workingHoursFilters.date || ''}
                   onChange={(e) => setWorkingHoursFilters({...workingHoursFilters, date: e.target.value})}
                 />
               </div>

@@ -725,12 +725,12 @@ export default function Settings() {
 
           <div className="space-y-4">
             <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Tax Rate (%)</h3>
-            <input type="number" value={rules.taxRate || '0'} onChange={e => setRules({...rules, taxRate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            <input type="number" value={rules.taxRate ?? 0} onChange={e => setRules({...rules, taxRate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
           </div>
 
           <div className="space-y-4">
             <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">VAT Rate (%)</h3>
-            <input type="number" value={rules.vatRate || '0'} onChange={e => setRules({...rules, vatRate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            <input type="number" value={rules.vatRate ?? 0} onChange={e => setRules({...rules, vatRate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
           </div>
 
           <div className="space-y-4 md:col-span-2">
@@ -792,11 +792,11 @@ export default function Settings() {
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase">Break (min)</label>
-                    <input type="number" value={shift.breakTime || 0} onChange={e => updateShift(shift.id, 'breakTime', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
+                    <input type="number" value={shift.breakTime ?? 0} onChange={e => updateShift(shift.id, 'breakTime', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase">Grace (min)</label>
-                    <input type="number" value={shift.gracePeriod || 0} onChange={e => updateShift(shift.id, 'gracePeriod', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
+                    <input type="number" value={shift.gracePeriod ?? 0} onChange={e => updateShift(shift.id, 'gracePeriod', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
                   </div>
                 </div>
                 <div className="pt-4 border-t border-slate-200 grid grid-cols-3 gap-4 text-center">

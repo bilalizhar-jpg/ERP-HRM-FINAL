@@ -3575,7 +3575,17 @@ async function startServer() {
       const shift = req.body;
       await db.query(
         'UPDATE shifts SET name = ?, start_time = ?, end_time = ?, break_time = ?, grace_period = ?, min_working_hours = ?, late_mark_rule = ?, status = ? WHERE id = ?',
-        [shift.name, shift.startTime, shift.endTime, shift.breakTime, shift.gracePeriod, shift.minWorkingHours, shift.lateMarkRule, shift.status, shift.id]
+        [
+          shift.name || null, 
+          shift.startTime || null, 
+          shift.endTime || null, 
+          shift.breakTime || 0, 
+          shift.gracePeriod || 0, 
+          shift.minWorkingHours || 0, 
+          shift.lateMarkRule || null, 
+          shift.status || 'active', 
+          shift.id
+        ]
       );
       console.log(`Shift ${shift.name} updated successfully in database.`);
       res.json({ message: 'Shift updated successfully' });
@@ -3609,7 +3619,7 @@ async function startServer() {
 
   app.post('/api/employer/settings/rules', async (req, res) => {
     try {
-      const rules = req.body;
+      const rules = req.body || {};
       await db.query('UPDATE companies SET business_rules = ? LIMIT 1', [JSON.stringify(rules)]);
       res.json({ message: 'Rules saved successfully' });
     } catch (error) {
@@ -3647,7 +3657,16 @@ async function startServer() {
 
       await db.query(
         'UPDATE companies SET name = ?, email = ?, mobile = ?, website = ?, about = ?, head_office_location = ?, factory_location = ?, logo_url = ? LIMIT 1',
-        [name, email, phone, website, about, head_office_location, factory_location, logo_url]
+        [
+          name || null, 
+          email || null, 
+          phone || null, 
+          website || null, 
+          about || null, 
+          head_office_location || null, 
+          factory_location || null, 
+          logo_url || null
+        ]
       );
       console.log('Profile updated successfully in database.');
       res.json({ message: 'Profile saved successfully' });

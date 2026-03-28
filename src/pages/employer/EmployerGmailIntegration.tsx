@@ -250,7 +250,7 @@ export default function EmployerGmailIntegration() {
                 <input 
                   type="text" 
                   placeholder="smtp.gmail.com"
-                  value={smtpSettings.host}
+                  value={smtpSettings.host || ''}
                   onChange={(e) => setSmtpSettings({...smtpSettings, host: e.target.value})}
                   className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all"
                 />
@@ -260,7 +260,7 @@ export default function EmployerGmailIntegration() {
                 <input 
                   type="text" 
                   placeholder="587"
-                  value={smtpSettings.port}
+                  value={smtpSettings.port || ''}
                   onChange={(e) => setSmtpSettings({...smtpSettings, port: e.target.value})}
                   className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all"
                 />
@@ -273,7 +273,7 @@ export default function EmployerGmailIntegration() {
                 <input 
                   type="text" 
                   placeholder="your-email@company.com"
-                  value={smtpSettings.user}
+                  value={smtpSettings.user || ''}
                   onChange={(e) => setSmtpSettings({...smtpSettings, user: e.target.value})}
                   className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all"
                 />
@@ -283,7 +283,7 @@ export default function EmployerGmailIntegration() {
                 <input 
                   type="password" 
                   placeholder="••••••••••••"
-                  value={smtpSettings.pass}
+                  value={smtpSettings.pass || ''}
                   onChange={(e) => setSmtpSettings({...smtpSettings, pass: e.target.value})}
                   className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all"
                 />
@@ -296,7 +296,7 @@ export default function EmployerGmailIntegration() {
                 <input 
                   type="email" 
                   placeholder="noreply@company.com"
-                  value={smtpSettings.fromEmail}
+                  value={smtpSettings.fromEmail || ''}
                   onChange={(e) => setSmtpSettings({...smtpSettings, fromEmail: e.target.value})}
                   className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all"
                 />
@@ -306,7 +306,7 @@ export default function EmployerGmailIntegration() {
                 <input 
                   type="text" 
                   placeholder="Acme Corp HR"
-                  value={smtpSettings.fromName}
+                  value={smtpSettings.fromName || ''}
                   onChange={(e) => setSmtpSettings({...smtpSettings, fromName: e.target.value})}
                   className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all"
                 />
