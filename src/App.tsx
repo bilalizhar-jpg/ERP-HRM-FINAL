@@ -31,6 +31,13 @@ import Designation from './pages/employer/Designation';
 import Employee from './pages/employer/Employee';
 import Leave from './pages/employer/Leave';
 import Payroll from './pages/employer/Payroll';
+import CompanyPayroll from './pages/employer/payroll/CompanyPayroll';
+import SalaryAdvance from './pages/employer/payroll/SalaryAdvance';
+import SalaryGenerate from './pages/employer/payroll/SalaryGenerate';
+import ManageEmployeeSalary from './pages/employer/payroll/ManageEmployeeSalary';
+import SalarySlip from './pages/employer/payroll/SalarySlip';
+import PayrollPostingSheet from './pages/employer/payroll/PayrollPostingSheet';
+import EmployeeSalaryChart from './pages/employer/payroll/EmployeeSalaryChart';
 import Shifts from './pages/employer/Shifts';
 import Performance from './pages/employer/Performance';
 import Recruitment from './pages/employer/Recruitment';
@@ -46,7 +53,7 @@ import CompanyPolicy from './pages/employer/CompanyPolicy';
 import Award from './pages/employer/Award';
 import Onboarding from './pages/employer/Onboarding';
 import Offboarding from './pages/employer/Offboarding';
-import NoticeBoard from './pages/employer/NoticeBoard';
+import NoticeBoard from './pages/NoticeBoard';
 import ProjectManagement from './pages/employer/ProjectManagement';
 import Marketing from './pages/employer/Marketing';
 import RewardPoints from './pages/employer/RewardPoints';
@@ -121,6 +128,14 @@ function App() {
         <Route path="/super-admin/employer/award" element={<Award />} />
         <Route path="/super-admin/employer/leaves" element={<Leave />} />
         <Route path="/super-admin/employer/payroll" element={<Payroll />} />
+        <Route path="/super-admin/employer/payroll/company-payroll" element={<CompanyPayroll />} />
+        <Route path="/super-admin/employer/payroll/salary-advance" element={<SalaryAdvance />} />
+        <Route path="/super-admin/employer/payroll/salary-generate" element={<SalaryGenerate />} />
+        <Route path="/super-admin/employer/payroll/manage-salary" element={<ManageEmployeeSalary />} />
+        <Route path="/super-admin/employer/payroll/payslip/:id" element={<SalarySlip />} />
+        <Route path="/super-admin/employer/payroll/posting-sheet/:id" element={<PayrollPostingSheet />} />
+        <Route path="/super-admin/employer/payroll/salary-chart/:id" element={<EmployeeSalaryChart />} />
+        <Route path="/super-admin/employer/payroll/sales-tax" element={<Payroll />} />
         <Route path="/super-admin/employer/shifts" element={<Shifts />} />
         <Route path="/super-admin/employer/performance" element={<Performance />} />
         <Route path="/super-admin/employer/recruitment" element={<Recruitment />} />
@@ -161,6 +176,14 @@ function App() {
           <Route path="award" element={<CompanyAdminAward />} />
           <Route path="leaves" element={<Leave />} />
           <Route path="payroll" element={<Payroll />} />
+          <Route path="payroll/company-payroll" element={<CompanyPayroll />} />
+          <Route path="payroll/salary-advance" element={<SalaryAdvance />} />
+          <Route path="payroll/salary-generate" element={<SalaryGenerate />} />
+          <Route path="payroll/manage-salary" element={<ManageEmployeeSalary />} />
+          <Route path="payroll/payslip/:id" element={<SalarySlip />} />
+          <Route path="payroll/posting-sheet/:id" element={<PayrollPostingSheet />} />
+          <Route path="payroll/salary-chart/:id" element={<EmployeeSalaryChart />} />
+          <Route path="payroll/sales-tax" element={<Payroll />} />
           <Route path="shifts" element={<Shifts />} />
           <Route path="performance" element={<Performance />} />
           <Route path="recruitment" element={<Recruitment />} />
@@ -198,8 +221,8 @@ function App() {
         <Route path="/employee" element={<EmployeeLayout />}>
           <Route path="dashboard" element={<EmployeeDashboard />} />
           <Route path="attendance" element={<EmployeeAttendance />} />
+          <Route path="notice-board" element={<NoticeBoard isAdmin={false} />} />
           <Route path="leaves" element={<EmployeeLeaves />} />
-          <Route path="notice-board" element={<NoticeBoard />} />
           <Route path="payroll" element={<EmployeePayroll />} />
           <Route path="assets" element={<Assets />} />
           <Route path="message" element={<Message />} />

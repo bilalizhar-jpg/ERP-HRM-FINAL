@@ -78,12 +78,51 @@ export const employerModules: ModuleItem[] = [
     ]
   },
   { name: 'TRAINING', icon: Briefcase, path: '/super-admin/employer/training' },
-  { name: 'ONBOARDING', icon: UserCheck, path: '/super-admin/employer/onboarding' },
-  { name: 'OFFBOARDING', icon: UserMinus, path: '/super-admin/employer/offboarding' },
+  { 
+    name: 'ONBOARDING', 
+    icon: UserCheck, 
+    path: '/super-admin/employer/onboarding',
+    hasDropdown: true,
+    subItems: [
+      { name: 'OFFER LETTER', path: '/offer-letter' },
+      { name: 'CONTACT LETTER', path: '/contact-letter' },
+      { name: 'WARNING LETTER', path: '/warning-letter' },
+      { name: 'TERMINATION LETTER', path: '/termination-letter' },
+      { name: 'COMPLAINT LETTER', path: '/complaint-letter' },
+    ]
+  },
+  { 
+    name: 'OFFBOARDING', 
+    icon: UserMinus, 
+    path: '/super-admin/employer/offboarding',
+    hasDropdown: true,
+    subItems: [
+      { name: 'RESIGNATION ACCEPTANCE LETTER', path: '/resignation-acceptance' },
+      { name: 'TERMINATION LETTER', path: '/termination-letter' },
+      { name: 'EXPERIENCE LETTER', path: '/experience-letter' },
+      { name: 'RELIEVING LETTER', path: '/relieving-letter' },
+      { name: 'FULL & FINAL SETTLEMENT (FNF)', path: '/fnf-settlement' },
+      { name: 'NO DUES / CLEARANCE CERTIFICATE', path: '/no-dues' },
+      { name: 'EXIT INTERVIEW FORM', path: '/exit-interview' },
+      { name: 'NDA / CONFIDENTIALITY REMINDER', path: '/nda-reminder' },
+    ]
+  },
   { name: 'LEAVES', icon: CalendarOff, path: '/super-admin/employer/leaves' },
   { name: 'SHIFTS', icon: Clock, path: '/super-admin/employer/shifts' },
   { name: 'NOTICE BOARD', icon: Bell, path: '/super-admin/employer/notice-board' },
-  { name: 'PAYROLL', icon: DollarSign, path: '/super-admin/employer/payroll' },
+  { 
+    name: 'PAYROLL', 
+    icon: DollarSign, 
+    path: '/super-admin/employer/payroll',
+    hasDropdown: true,
+    subItems: [
+      { name: 'COMPANY PAYROLL', path: '/company-payroll' },
+      { name: 'SALARY ADVANCE', path: '/salary-advance' },
+      { name: 'SALARY GENERATE', path: '/salary-generate' },
+      { name: 'MANAGE EMPLOYEE SALARY', path: '/manage-salary' },
+      { name: 'SALES TAX FORMAT', path: '/sales-tax' },
+    ]
+  },
   { name: 'PERFORMANCE', icon: Target, path: '/super-admin/employer/performance' },
   { name: 'ASSETS', icon: Laptop, path: '/super-admin/employer/assets' },
   { name: 'EXPENSES', icon: Receipt, path: '/super-admin/employer/expenses' },

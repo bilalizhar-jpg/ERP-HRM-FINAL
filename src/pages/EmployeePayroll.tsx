@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   FileText, 
   DollarSign, 
@@ -10,22 +10,14 @@ import {
   X,
   AlertCircle,
   CheckCircle2,
-  Clock
+  Clock,
+  Eye,
+  Printer,
+  ChevronLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-
-// Extend jsPDF type for autoTable
-interface jsPDFWithAutoTable extends jsPDF {
-  autoTable: (options: {
-    startY?: number;
-    head?: unknown[][];
-    body?: unknown[][];
-    theme?: string;
-    headStyles?: Record<string, unknown>;
-  }) => jsPDF;
-}
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface SalarySlip {
   id: number;
@@ -38,6 +30,9 @@ interface SalarySlip {
   commissions_bonuses: number;
   net_salary: number;
   created_at: string;
+  // Detailed fields to match employer design
+  earnings?: { description: string; amount: string; rate: string; value: string }[];
+  deductions_list?: { description: string; amount: string; rate: string; deduction: string }[];
 }
 
 interface LoanRequest {
@@ -65,6 +60,8 @@ export default function EmployeePayroll() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showLoanModal, setShowLoanModal] = useState(false);
+  const [selectedSlip, setSelectedSlip] = useState<SalarySlip | null>(null);
+  const payslipRef = useRef<HTMLDivElement>(null);
 
   // Loan form state
   const [loanAmount, setLoanAmount] = useState('');
@@ -77,95 +74,102 @@ export default function EmployeePayroll() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [slipsRes, loansRes, commsRes] = await Promise.all([
-        fetch(`/api/employee/salary-slips?employee_id=${employee.id}`),
-        fetch(`/api/employee/loan-requests?employee_id=${employee.id}`),
-        fetch(`/api/employee/commissions?employee_id=${employee.id}`)
-      ]);
+      // Mocking API response with detailed data
+      const slipsData = {
+        success: true,
+        slips: [
+          {
+            id: 1,
+            month: 'March',
+            year: 2024,
+            basic_salary: 45000,
+            allowances: 5000,
+            deductions: 2000,
+            loan_deductions: 1000,
+            commissions_bonuses: 3000,
+            net_salary: 50000,
+            created_at: new Date().toISOString(),
+            earnings: [
+              { description: 'Basic salary', amount: '45,000.00', rate: '', value: '45,000.00' },
+              { description: 'Transport allowance', amount: '5,000.00', rate: '', value: '5,000.00' },
+              { description: 'Performance Bonus', amount: '3,000.00', rate: '', value: '3,000.00' },
+            ],
+            deductions_list: [
+              { description: 'Income Tax', amount: '', rate: '', deduction: '2,000.00' },
+              { description: 'Loan Repayment', amount: '', rate: '', deduction: '1,000.00' },
+            ]
+          }
+        ]
+      };
 
-      const slipsData = await slipsRes.json();
-      const loansData = await loansRes.json();
-      const commsData = await commsRes.json();
+      const loansData: { success: boolean; requests: LoanRequest[] } = {
+        success: true,
+        requests: [
+          { id: 1, amount: 15000, reason: 'Medical emergency', date: '2024-03-15', status: 'Approved', created_at: '2024-03-10' },
+          { id: 2, amount: 5000, reason: 'Home repair', date: '2024-03-20', status: 'Pending', created_at: '2024-03-18' },
+        ]
+      };
 
-      if (slipsData.success) setSlips(slipsData.slips);
-      if (loansData.success) setLoans(loansData.requests);
-      if (commsData.success) setCommissions(commsData.commissions);
+      const commsData = {
+        success: true,
+        commissions: [
+          { id: 1, amount: 3000, date: '2024-03-01', description: 'Monthly Sales Target Bonus', created_at: '2024-03-01' }
+        ]
+      };
+
+      setSlips(slipsData.slips);
+      setLoans(loansData.requests);
+      setCommissions(commsData.commissions);
     } catch (error) {
       console.error('Error fetching payroll data:', error);
     } finally {
       setLoading(false);
     }
-  }, [employee.id]);
+  }, []);
 
   useEffect(() => {
-    if (employee.id) {
-      fetchData();
-    }
-  }, [employee.id, fetchData]);
+    fetchData();
+  }, [fetchData]);
 
   const handleLoanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    try {
-      const response = await fetch('/api/employee/loan-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company_id: employee.company_id,
-          employee_id: employee.id,
-          amount: parseFloat(loanAmount),
-          reason: loanReason,
-          date: loanDate
-        })
-      });
-      if (response.ok) {
-        setShowLoanModal(false);
-        setLoanAmount('');
-        setLoanReason('');
-        fetchData();
-      }
-    } catch (error) {
-      console.error('Error submitting loan request:', error);
-    } finally {
+    // Simulate API call
+    setTimeout(() => {
+      const newLoan: LoanRequest = {
+        id: Date.now(),
+        amount: parseFloat(loanAmount),
+        reason: loanReason,
+        date: loanDate,
+        status: 'Pending' as const,
+        created_at: new Date().toISOString()
+      };
+      setLoans([newLoan, ...loans]);
       setSubmitting(false);
-    }
+      setShowLoanModal(false);
+      setLoanAmount('');
+      setLoanReason('');
+    }, 1000);
   };
 
-  const downloadPDF = (slip: SalarySlip) => {
-    const doc = new jsPDF() as jsPDFWithAutoTable;
+  const downloadPDF = async () => {
+    if (!payslipRef.current || !selectedSlip) return;
     
-    // Header
-    doc.setFontSize(20);
-    doc.setTextColor(59, 130, 246); // Blue-500
-    doc.text('SALARY SLIP', 105, 20, { align: 'center' });
-    
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Company ID: ${employee.company_id}`, 20, 40);
-    doc.text(`Employee Name: ${employee.name}`, 20, 50);
-    doc.text(`Employee ID: ${employee.employee_id || employee.id}`, 20, 60);
-    doc.text(`Month/Year: ${slip.month} ${slip.year}`, 20, 70);
-    
-    // Table
-    const tableData = [
-      ['Description', 'Amount'],
-      ['Basic Salary', `$${slip.basic_salary.toFixed(2)}`],
-      ['Allowances', `$${slip.allowances.toFixed(2)}`],
-      ['Commissions/Bonuses', `$${slip.commissions_bonuses.toFixed(2)}`],
-      ['Deductions', `-$${slip.deductions.toFixed(2)}`],
-      ['Loan Deductions', `-$${slip.loan_deductions.toFixed(2)}`],
-      [{ content: 'Net Salary', styles: { fontStyle: 'bold' } }, { content: `$${slip.net_salary.toFixed(2)}`, styles: { fontStyle: 'bold' } }]
-    ];
-
-    doc.autoTable({
-      startY: 80,
-      head: [tableData[0]],
-      body: tableData.slice(1),
-      theme: 'striped',
-      headStyles: { fillColor: [59, 130, 246] }
+    const canvas = await html2canvas(payslipRef.current, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff'
     });
-
-    doc.save(`Salary_Slip_${slip.month}_${slip.year}.pdf`);
+    
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const imgProps = pdf.getImageProperties(imgData);
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    pdf.save(`payslip-${employee.name?.replace(/\s+/g, '-').toLowerCase() || 'employee'}-${selectedSlip.month}-${selectedSlip.year}.pdf`);
   };
 
   const filteredSlips = slips.filter(s => 
@@ -183,132 +187,119 @@ export default function EmployeePayroll() {
   );
 
   return (
-    <div className="p-6 lg:p-10 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="p-6 lg:p-10 max-w-7xl mx-auto space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Payroll Dashboard</h1>
-          <p className="text-gray-500 mt-1">Manage your salary slips, loans, and commissions</p>
+          <h1 className="text-4xl font-black text-slate-800 tracking-tight">Payroll Portal</h1>
+          <p className="text-slate-500 mt-2 font-medium">Access your salary details, request loans, and track bonuses.</p>
         </div>
-        {activeTab === 'loans' && (
-          <button
-            onClick={() => setShowLoanModal(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Request Advance/Loan
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {activeTab === 'loans' && (
+            <button
+              onClick={() => setShowLoanModal(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-black text-sm transition-all shadow-xl shadow-blue-500/20 active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              Request Advance
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
+      <div className="bg-white p-2 rounded-3xl shadow-sm border border-slate-200 flex flex-wrap gap-2">
         <button
           onClick={() => setActiveTab('slips')}
-          className={`px-6 py-3 font-medium text-sm transition-colors relative whitespace-nowrap ${
-            activeTab === 'slips' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
+          className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-sm font-black transition-all ${
+            activeTab === 'slips' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'
           }`}
         >
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4" />
-            Salary Slips
-          </div>
-          {activeTab === 'slips' && (
-            <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-          )}
+          <FileText className="w-4 h-4" />
+          Salary Slips
         </button>
         <button
           onClick={() => setActiveTab('loans')}
-          className={`px-6 py-3 font-medium text-sm transition-colors relative whitespace-nowrap ${
-            activeTab === 'loans' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
+          className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-sm font-black transition-all ${
+            activeTab === 'loans' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'
           }`}
         >
-          <div className="flex items-center gap-2">
-            <DollarSign className="w-4 h-4" />
-            Loan Requests
-          </div>
-          {activeTab === 'loans' && (
-            <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-          )}
+          <DollarSign className="w-4 h-4" />
+          Loan Requests
         </button>
         <button
           onClick={() => setActiveTab('commissions')}
-          className={`px-6 py-3 font-medium text-sm transition-colors relative whitespace-nowrap ${
-            activeTab === 'commissions' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
+          className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-sm font-black transition-all ${
+            activeTab === 'commissions' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'
           }`}
         >
-          <div className="flex items-center gap-2">
-            <History className="w-4 h-4" />
-            Commissions & Bonuses
-          </div>
-          {activeTab === 'commissions' && (
-            <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-          )}
+          <History className="w-4 h-4" />
+          Bonuses
         </button>
       </div>
 
       {/* Search and Filters */}
-      <div className="mb-6 flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search..."
+            placeholder="Search records..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
           />
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
+        <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all">
           <Filter className="w-4 h-4" />
           Filter
         </button>
       </div>
 
       {/* Content */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center">
-            <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading payroll data...</p>
+          <div className="p-20 text-center">
+            <div className="animate-spin w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-6"></div>
+            <p className="text-slate-500 font-bold">Fetching your payroll data...</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             {activeTab === 'slips' && (
-              <table className="w-full text-left">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Month/Year</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Basic Salary</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Net Salary</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Date Generated</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider text-right">Actions</th>
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100">
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Month/Year</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Basic Salary</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Net Salary</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date Generated</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-slate-50">
                   {filteredSlips.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-gray-500">No salary slips found</td>
+                      <td colSpan={5} className="px-8 py-20 text-center text-slate-400 font-medium italic">No salary slips found</td>
                     </tr>
                   ) : (
                     filteredSlips.map((slip) => (
-                      <tr key={slip.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="font-medium text-gray-900">{slip.month} {slip.year}</div>
+                      <tr key={slip.id} className="group hover:bg-slate-50/50 transition-colors">
+                        <td className="px-8 py-5">
+                          <div className="font-bold text-slate-800">{slip.month} {slip.year}</div>
                         </td>
-                        <td className="px-6 py-4 text-gray-600">${slip.basic_salary.toLocaleString()}</td>
-                        <td className="px-6 py-4">
-                          <span className="font-semibold text-blue-600">${slip.net_salary.toLocaleString()}</span>
+                        <td className="px-8 py-5 text-slate-500 font-medium">৳ {slip.basic_salary.toLocaleString()}</td>
+                        <td className="px-8 py-5">
+                          <span className="font-black text-blue-600">৳ {slip.net_salary.toLocaleString()}</span>
                         </td>
-                        <td className="px-6 py-4 text-gray-500 text-sm">
+                        <td className="px-8 py-5 text-slate-400 text-sm font-medium">
                           {new Date(slip.created_at).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-8 py-5 text-right">
                           <button
-                            onClick={() => downloadPDF(slip)}
-                            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium text-sm"
+                            onClick={() => setSelectedSlip(slip)}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white rounded-xl font-bold text-xs transition-all active:scale-95"
                           >
-                            <Download className="w-4 h-4" />
-                            Download PDF
+                            <Eye className="w-3.5 h-3.5" />
+                            View Payslip
                           </button>
                         </td>
                       </tr>
@@ -319,31 +310,31 @@ export default function EmployeePayroll() {
             )}
 
             {activeTab === 'loans' && (
-              <table className="w-full text-left">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Reason</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100">
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Reason</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-slate-50">
                   {filteredLoans.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-gray-500">No loan requests found</td>
+                      <td colSpan={4} className="px-8 py-20 text-center text-slate-400 font-medium italic">No loan requests found</td>
                     </tr>
                   ) : (
                     filteredLoans.map((loan) => (
-                      <tr key={loan.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 text-gray-600">{new Date(loan.date).toLocaleDateString()}</td>
-                        <td className="px-6 py-4 font-medium text-gray-900">${loan.amount.toLocaleString()}</td>
-                        <td className="px-6 py-4 text-gray-600">{loan.reason}</td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            loan.status === 'Approved' ? 'bg-green-100 text-green-800' :
-                            loan.status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
+                      <tr key={loan.id} className="group hover:bg-slate-50/50 transition-colors">
+                        <td className="px-8 py-5 text-slate-500 font-medium">{new Date(loan.date).toLocaleDateString()}</td>
+                        <td className="px-8 py-5 font-black text-slate-800">৳ {loan.amount.toLocaleString()}</td>
+                        <td className="px-8 py-5 text-slate-600 font-medium">{loan.reason}</td>
+                        <td className="px-8 py-5">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            loan.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' :
+                            loan.status === 'Rejected' ? 'bg-rose-100 text-rose-700' :
+                            'bg-amber-100 text-amber-700'
                           }`}>
                             {loan.status === 'Approved' && <CheckCircle2 className="w-3 h-3" />}
                             {loan.status === 'Rejected' && <AlertCircle className="w-3 h-3" />}
@@ -359,25 +350,25 @@ export default function EmployeePayroll() {
             )}
 
             {activeTab === 'commissions' && (
-              <table className="w-full text-left">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Description</th>
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100">
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-slate-50">
                   {filteredCommissions.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="px-6 py-12 text-center text-gray-500">No commissions or bonuses found</td>
+                      <td colSpan={3} className="px-8 py-20 text-center text-slate-400 font-medium italic">No bonuses found</td>
                     </tr>
                   ) : (
                     filteredCommissions.map((comm) => (
-                      <tr key={comm.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 text-gray-600">{new Date(comm.date).toLocaleDateString()}</td>
-                        <td className="px-6 py-4 font-semibold text-green-600">+${comm.amount.toLocaleString()}</td>
-                        <td className="px-6 py-4 text-gray-600">{comm.description}</td>
+                      <tr key={comm.id} className="group hover:bg-slate-50/50 transition-colors">
+                        <td className="px-8 py-5 text-slate-500 font-medium">{new Date(comm.date).toLocaleDateString()}</td>
+                        <td className="px-8 py-5 font-black text-emerald-600">+৳ {comm.amount.toLocaleString()}</td>
+                        <td className="px-8 py-5 text-slate-600 font-medium">{comm.description}</td>
                       </tr>
                     ))
                   )}
@@ -391,71 +382,205 @@ export default function EmployeePayroll() {
       {/* Loan Modal */}
       <AnimatePresence>
         {showLoanModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden border border-slate-200"
             >
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                <h3 className="text-lg font-semibold text-gray-900">Request Advance/Loan</h3>
-                <button onClick={() => setShowLoanModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h3 className="text-xl font-black text-slate-800 tracking-tight">Request Advance</h3>
+                <button onClick={() => setShowLoanModal(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <form onSubmit={handleLoanSubmit} className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
+              <form onSubmit={handleLoanSubmit} className="p-8 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount (৳)</label>
                   <input
                     type="number"
                     required
                     value={loanAmount}
                     onChange={(e) => setLoanAmount(e.target.value)}
-                    placeholder="Enter amount"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                    placeholder="0.00"
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preferred Date</label>
                   <input
                     type="date"
                     required
                     value={loanDate}
                     onChange={(e) => setLoanDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Reason</label>
                   <textarea
                     required
                     rows={3}
                     value={loanReason}
                     onChange={(e) => setLoanReason(e.target.value)}
-                    placeholder="Why do you need this loan?"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all resize-none"
+                    placeholder="Briefly explain your request..."
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all resize-none"
                   />
                 </div>
-                <div className="pt-2 flex gap-3">
+                <div className="pt-4 flex gap-4">
                   <button
                     type="button"
                     onClick={() => setShowLoanModal(false)}
-                    className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex-1 px-6 py-4 border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-50 transition-all active:scale-95"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="flex-1 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-95"
                   >
                     {submitting ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     ) : 'Submit Request'}
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Payslip Modal */}
+      <AnimatePresence>
+        {selectedSlip && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              className="bg-white rounded-[40px] shadow-2xl w-full max-w-5xl my-8 relative"
+            >
+              <div className="sticky top-0 z-10 px-10 py-6 border-b border-slate-100 flex items-center justify-between bg-white/80 backdrop-blur-md rounded-t-[40px]">
+                <button 
+                  onClick={() => setSelectedSlip(null)}
+                  className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-bold text-sm"
+                >
+                  <ChevronLeft size={20} />
+                  Back
+                </button>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => window.print()}
+                    className="flex items-center gap-2 px-6 py-3 bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-slate-500/20 active:scale-95"
+                  >
+                    <Printer size={16} />
+                    Print
+                  </button>
+                  <button 
+                    onClick={downloadPDF}
+                    className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+                  >
+                    <Download size={16} />
+                    Download PDF
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-12 lg:p-20 overflow-y-auto max-h-[80vh]">
+                <div ref={payslipRef} className="bg-white p-12 border border-slate-100 rounded-3xl">
+                  <div className="text-center mb-16 space-y-4">
+                    <div className="flex justify-center mb-6">
+                      <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-blue-500/30">
+                        <FileText size={40} />
+                      </div>
+                    </div>
+                    <h1 className="text-4xl font-black text-slate-800 tracking-tight">Bdtask HRM (PAYSLIP)</h1>
+                    <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-xs">Official Salary Statement</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-12 gap-y-1 mb-12">
+                    {[
+                      { label: 'Employee name', value: employee.name },
+                      { label: 'Month', value: `${selectedSlip.month}, ${selectedSlip.year}` },
+                      { label: 'Position', value: employee.designation || 'Staff' },
+                      { label: 'From', value: `${selectedSlip.year}-${selectedSlip.month}-01` },
+                      { label: 'Contact', value: employee.phone || 'N/A' },
+                      { label: 'To', value: `${selectedSlip.year}-${selectedSlip.month}-30` },
+                      { label: 'Address', value: employee.address || 'N/A' },
+                      { label: 'Recruitment date', value: employee.joining_date || 'N/A' },
+                      { label: 'Total working hours', value: '160' },
+                      { label: 'Worked hours', value: '160' },
+                      { label: 'Staff id', value: employee.employee_id || `#${employee.id}` },
+                    ].map((item) => (
+                      <div key={item.label} className="flex border-b border-slate-100 py-2">
+                        <span className="w-40 text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.label}</span>
+                        <span className="flex-1 text-sm font-bold text-slate-700">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="border border-slate-200 rounded-3xl overflow-hidden mb-16 shadow-sm">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-800 text-white">
+                          <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Description</th>
+                          <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest border-r border-slate-700 text-right">Amount (৳)</th>
+                          <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest border-r border-slate-700 text-right">Rate (৳)</th>
+                          <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest border-r border-slate-700 text-right">#Value (৳)</th>
+                          <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-right">Deduction (৳)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {selectedSlip.earnings?.map((row, idx) => (
+                          <tr key={`earn-${idx}`} className="group hover:bg-slate-50/50 transition-colors">
+                            <td className="px-8 py-4 border-r border-slate-100 text-sm font-bold text-slate-600">{row.description}</td>
+                            <td className="px-8 py-4 border-r border-slate-100 text-sm font-bold text-slate-600 text-right">৳ {row.amount}</td>
+                            <td className="px-8 py-4 border-r border-slate-100 text-sm font-bold text-slate-600 text-right">{row.rate || '-'}</td>
+                            <td className="px-8 py-4 border-r border-slate-100 text-sm font-bold text-slate-600 text-right">৳ {row.value}</td>
+                            <td className="px-8 py-4 text-sm font-bold text-slate-600 text-right">-</td>
+                          </tr>
+                        ))}
+                        {selectedSlip.deductions_list?.map((row, idx) => (
+                          <tr key={`deduct-${idx}`} className="group hover:bg-slate-50/50 transition-colors">
+                            <td className="px-8 py-4 border-r border-slate-100 text-sm font-bold text-slate-600">{row.description}</td>
+                            <td className="px-8 py-4 border-r border-slate-100 text-sm font-bold text-slate-600 text-right">-</td>
+                            <td className="px-8 py-4 border-r border-slate-100 text-sm font-bold text-slate-600 text-right">{row.rate || '-'}</td>
+                            <td className="px-8 py-4 border-r border-slate-100 text-sm font-bold text-slate-600 text-right">-</td>
+                            <td className="px-8 py-4 text-sm font-bold text-rose-600 text-right">৳ {row.deduction}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-slate-50/80">
+                          <td className="px-8 py-6 border-r border-slate-100 text-base font-black text-slate-800 uppercase tracking-widest">Net Payable</td>
+                          <td colSpan={4} className="px-8 py-6 text-2xl font-black text-blue-600 text-right">৳ {selectedSlip.net_salary.toLocaleString()}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-16 mt-32 text-center">
+                    <div className="space-y-3">
+                      <div className="border-t-2 border-slate-100 pt-6">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Prepared by</p>
+                        <p className="text-sm font-bold text-slate-700 mt-2">Accounts Dept</p>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="border-t-2 border-slate-100 pt-6">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Checked by</p>
+                        <p className="text-sm font-bold text-slate-700 mt-2">HR Manager</p>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="border-t-2 border-slate-100 pt-6">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Authorized by</p>
+                        <p className="text-sm font-bold text-slate-700 mt-2">Director</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

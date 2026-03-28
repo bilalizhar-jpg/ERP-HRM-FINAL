@@ -127,11 +127,16 @@ export default function SuperAdminSidebar() {
                       {item.subItems ? (
                         item.subItems.map((subItem: SubItem) => {
                           const subPath = `${item.path}${subItem.path}`;
+                          const isSubActive = location.pathname === subPath;
                           return (
                             <li key={subItem.name}>
                               <button 
                                 onClick={() => navigate(subPath)} 
-                                className="w-full text-left px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-colors font-bold"
+                                className={`w-full text-left px-4 py-2 text-[10px] uppercase tracking-wider transition-colors rounded-lg font-bold ${
+                                  isSubActive 
+                                    ? 'bg-blue-50 text-blue-600' 
+                                    : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'
+                                }`}
                               >
                                 {subItem.name}
                               </button>
