@@ -27,6 +27,14 @@ export default function EmployerWhatsAppIntegration() {
   const [companyId, setCompanyId] = useState<number | null>(null);
   const [companyName, setCompanyName] = useState<string>('');
 
+  // Attendance Alert Settings State
+  const [officeTime, setOfficeTime] = useState('09:00');
+  const [graceTime, setGraceTime] = useState('09:15');
+  const [triggerTime, setTriggerTime] = useState('09:16');
+  const [messageTemplate, setMessageTemplate] = useState('Dear {{employee_name}}, you have not marked your attendance. Please mark it immediately.');
+  const [isActive, setIsActive] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
   useEffect(() => {
     const companyAdmin = localStorage.getItem('companyAdmin');
     if (companyAdmin) {
@@ -49,14 +57,63 @@ export default function EmployerWhatsAppIntegration() {
     }
   }, [companyId]);
 
+  const fetchAttendanceSettings = useCallback(async () => {
+    if (!companyId) return;
+    try {
+      const res = await fetch(`/api/whatsapp/attendance-settings?companyId=${companyId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          setOfficeTime(data.office_time ? data.office_time.substring(0, 5) : '09:00');
+          setGraceTime(data.grace_time ? data.grace_time.substring(0, 5) : '09:15');
+          setTriggerTime(data.trigger_time ? data.trigger_time.substring(0, 5) : '09:16');
+          setMessageTemplate(data.message_template || 'Dear {{employee_name}}, you have not marked your attendance. Please mark it immediately.');
+          setIsActive(Boolean(data.is_active));
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching attendance settings", error);
+    }
+  }, [companyId]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (companyId) {
       fetchStatus();
+      fetchAttendanceSettings();
       interval = setInterval(fetchStatus, 5000);
     }
     return () => clearInterval(interval);
-  }, [companyId, fetchStatus]);
+  }, [companyId, fetchStatus, fetchAttendanceSettings]);
+
+  const handleSaveSettings = async () => {
+    if (!companyId) return;
+    setIsSavingSettings(true);
+    try {
+      const res = await fetch('/api/whatsapp/attendance-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_id: companyId,
+          office_time: officeTime,
+          grace_time: graceTime,
+          trigger_time: triggerTime,
+          message_template: messageTemplate,
+          is_active: isActive
+        })
+      });
+      if (res.ok) {
+        alert('Attendance alert settings saved successfully!');
+      } else {
+        alert('Failed to save settings');
+      }
+    } catch (error) {
+      console.error("Error saving settings", error);
+      alert('Error saving settings');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   const handleConnect = async () => {
     if (!companyId) return;
@@ -253,6 +310,74 @@ export default function EmployerWhatsAppIntegration() {
                 }`}
               >
                 {isSending ? <Loader2 className="animate-spin" /> : <><Send size={20} /> DISPATCH TEST PROTOCOL</>}
+              </button>
+            </div>
+          </div>
+
+          {/* Attendance Alert Settings Card */}
+          <div className="bg-white rounded-[2.5rem] p-10 shadow-xl border border-slate-100">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">ATTENDANCE ALERT RULES</h2>
+              <label className="flex items-center cursor-pointer">
+                <div className="relative">
+                  <input type="checkbox" className="sr-only" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+                  <div className={`block w-14 h-8 rounded-full transition-colors ${isActive ? 'bg-emerald-500' : 'bg-slate-200'}`}></div>
+                  <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isActive ? 'transform translate-x-6' : ''}`}></div>
+                </div>
+                <div className="ml-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {isActive ? 'ACTIVE' : 'DISABLED'}
+                </div>
+              </label>
+            </div>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">OFFICE TIME</label>
+                  <input 
+                    type="time" 
+                    value={officeTime}
+                    onChange={(e) => setOfficeTime(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">GRACE TIME</label>
+                  <input 
+                    type="time" 
+                    value={graceTime}
+                    onChange={(e) => setGraceTime(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">TRIGGER TIME</label>
+                  <input 
+                    type="time" 
+                    value={triggerTime}
+                    onChange={(e) => setTriggerTime(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">MESSAGE TEMPLATE</label>
+                <textarea 
+                  value={messageTemplate}
+                  onChange={(e) => setMessageTemplate(e.target.value)}
+                  rows={3}
+                  className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-slate-900 text-sm font-bold focus:ring-2 focus:ring-blue-600 transition-all resize-none"
+                />
+                <p className="text-[10px] text-slate-400 ml-4">Available variables: <span className="font-bold text-blue-600">{"{{employee_name}}"}</span></p>
+              </div>
+
+              <button 
+                onClick={handleSaveSettings}
+                disabled={isSavingSettings}
+                className="w-full py-5 bg-blue-600 text-white font-black text-sm tracking-widest uppercase rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2"
+              >
+                {isSavingSettings ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={20} /> SAVE ALERT RULES</>}
               </button>
             </div>
           </div>

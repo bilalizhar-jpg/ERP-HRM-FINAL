@@ -5,6 +5,7 @@ import nodemailer from "nodemailer";
 import { google } from "googleapis";
 import { Connection } from "mysql2/promise";
 import db from "./src/db";
+import cron from "node-cron";
 import makeWASocket, { 
   DisconnectReason, 
   useMultiFileAuthState as getAuthState, 
@@ -728,6 +729,37 @@ async function startServer() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create attendance_alert_settings table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS attendance_alert_settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        office_time TIME,
+        grace_time TIME,
+        trigger_time TIME,
+        message_template TEXT,
+        is_active BOOLEAN DEFAULT FALSE,
+        UNIQUE KEY (company_id),
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create whatsapp_logs table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS whatsapp_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        employee_id INT,
+        phone_number VARCHAR(50),
+        message TEXT,
+        status VARCHAR(50),
+        type VARCHAR(50),
+        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL
       )
     `);
 
@@ -3230,6 +3262,69 @@ async function startServer() {
       if (connection) connection.release();
     }
   });
+
+  app.get("/api/whatsapp/attendance-settings", async (req, res) => {
+    const { companyId } = req.query;
+    if (!companyId) return res.status(400).json({ error: "Company ID required" });
+
+    let connection;
+    try {
+      connection = await db.getConnection();
+      const [rows] = await connection.query(
+        "SELECT * FROM attendance_alert_settings WHERE company_id = ?",
+        [companyId]
+      ) as [any[], any];
+      
+      if (rows.length > 0) {
+        res.json(rows[0]);
+      } else {
+        res.json(null);
+      }
+    } catch (error) {
+      console.error("Error fetching attendance settings:", error);
+      res.status(500).json({ error: "Internal server error" });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.post("/api/whatsapp/attendance-settings", async (req, res) => {
+    const { company_id, office_time, grace_time, trigger_time, message_template, is_active } = req.body;
+    if (!company_id) return res.status(400).json({ error: "Company ID required" });
+
+    let connection;
+    try {
+      connection = await db.getConnection();
+      
+      const [existing] = await connection.query(
+        "SELECT id FROM attendance_alert_settings WHERE company_id = ?",
+        [company_id]
+      ) as [any[], any];
+
+      if (existing.length > 0) {
+        await connection.query(
+          `UPDATE attendance_alert_settings 
+           SET office_time = ?, grace_time = ?, trigger_time = ?, message_template = ?, is_active = ?
+           WHERE company_id = ?`,
+          [office_time || null, grace_time || null, trigger_time || null, message_template || '', is_active ? 1 : 0, company_id]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO attendance_alert_settings (company_id, office_time, grace_time, trigger_time, message_template, is_active)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [company_id, office_time || null, grace_time || null, trigger_time || null, message_template || '', is_active ? 1 : 0]
+        );
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving attendance settings:", error);
+      res.status(500).json({ error: "Internal server error" });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
   const getOAuth2Client = () => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -3701,6 +3796,86 @@ async function startServer() {
       });
     });
   }
+
+  // Cron job for WhatsApp Attendance Alerts
+  cron.schedule('* * * * *', async () => {
+    let connection;
+    try {
+      connection = await db.getConnection();
+      const now = new Date();
+      // Use UTC or server local time? The user might be in a different timezone.
+      // For simplicity, we'll use the server's local time.
+      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+
+      const [settings] = await connection.query(`
+        SELECT * FROM attendance_alert_settings 
+        WHERE is_active = TRUE AND TIME_FORMAT(trigger_time, '%H:%i') = ?
+      `, [currentTime]) as [any[], any];
+
+      for (const setting of settings) {
+        const companyId = setting.company_id;
+        const graceTime = setting.grace_time;
+        const template = setting.message_template;
+
+        const [lateEmployees] = await connection.query(`
+          SELECT e.id, e.name, e.mobile as phone 
+          FROM employees e
+          LEFT JOIN attendance a ON e.id = a.employee_id AND a.date = ?
+          WHERE e.company_id = ? 
+          AND e.status = 'active'
+          AND a.id IS NULL
+        `, [todayStr, companyId]) as [any[], any];
+
+        for (const emp of lateEmployees) {
+          if (!emp.phone) continue;
+
+          const [existingLogs] = await connection.query(`
+            SELECT id FROM whatsapp_logs 
+            WHERE company_id = ? AND employee_id = ? AND type = 'attendance_alert' AND DATE(sent_at) = ?
+          `, [companyId, emp.id, todayStr]) as [any[], any];
+
+          if (existingLogs.length > 0) continue;
+
+          let phone = emp.phone.replace(/\D/g, '');
+          if (phone.startsWith('0')) {
+            phone = '92' + phone.substring(1);
+          }
+          if (!phone.endsWith("@s.whatsapp.net")) {
+            phone += "@s.whatsapp.net";
+          }
+
+          const message = template.replace(/{{employee_name}}/g, emp.name);
+
+          const sock = sessions.get(Number(companyId));
+          if (sock) {
+            try {
+              const sentMsg = await sock.sendMessage(phone, { text: message });
+              await connection.query(`
+                INSERT INTO whatsapp_logs (company_id, employee_id, phone_number, message, status, type)
+                VALUES (?, ?, ?, ?, 'sent', 'attendance_alert')
+              `, [companyId, emp.id, phone, message]);
+            } catch (err) {
+              await connection.query(`
+                INSERT INTO whatsapp_logs (company_id, employee_id, phone_number, message, status, type)
+                VALUES (?, ?, ?, ?, 'failed', 'attendance_alert')
+              `, [companyId, emp.id, phone, message]);
+            }
+            
+            const delay = Math.floor(Math.random() * 3000) + 2000;
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error processing attendance alerts:', error);
+    } finally {
+      if (connection) connection.release();
+    }
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
