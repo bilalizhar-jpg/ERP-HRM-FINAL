@@ -52,7 +52,19 @@ import OrgChart from './pages/employer/OrgChart';
 import CompanyPolicy from './pages/employer/CompanyPolicy';
 import Award from './pages/employer/Award';
 import Onboarding from './pages/employer/Onboarding';
+import OfferLetter from './pages/employer/onboarding/OfferLetter';
+import ContactLetter from './pages/employer/onboarding/ContactLetter';
+import WarningLetter from './pages/employer/onboarding/WarningLetter';
+import ComplaintLetter from './pages/employer/onboarding/ComplaintLetter';
 import Offboarding from './pages/employer/Offboarding';
+import ResignationAcceptanceLetter from './pages/employer/offboarding/ResignationAcceptanceLetter';
+import OffboardingTerminationLetter from './pages/employer/offboarding/TerminationLetter';
+import ExperienceLetter from './pages/employer/offboarding/ExperienceLetter';
+import RelievingLetter from './pages/employer/offboarding/RelievingLetter';
+import FNFSettlement from './pages/employer/offboarding/FNFSettlement';
+import NoDues from './pages/employer/offboarding/NoDues';
+import ExitInterview from './pages/employer/offboarding/ExitInterview';
+import NDAReminder from './pages/employer/offboarding/NDAReminder';
 import NoticeBoard from './pages/NoticeBoard';
 import ProjectManagement from './pages/employer/ProjectManagement';
 import Marketing from './pages/employer/Marketing';
@@ -79,6 +91,7 @@ import EmployeeLeaves from './pages/EmployeeLeaves';
 import EmployeePayroll from './pages/EmployeePayroll';
 import EmployeeLogin from './pages/EmployeeLogin';
 import EmployeeDashboard from './pages/EmployeeDashboard';
+import GlobalAIAssistant from './components/GlobalAIAssistant';
 
 function Home() {
   return (
@@ -104,6 +117,7 @@ function Home() {
 function App() {
   return (
     <Router>
+      <GlobalAIAssistant />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/contact-us" element={<ContactUs />} />
@@ -149,7 +163,19 @@ function App() {
         <Route path="/super-admin/employer/recruitment/career-page" element={<Recruitment />} />
         <Route path="/super-admin/employer/recruitment/view-live-page" element={<Recruitment />} />
         <Route path="/super-admin/employer/onboarding" element={<Onboarding />} />
+        <Route path="/super-admin/employer/onboarding/offer-letter" element={<OfferLetter />} />
+        <Route path="/super-admin/employer/onboarding/contact-letter" element={<ContactLetter />} />
+        <Route path="/super-admin/employer/onboarding/warning-letter" element={<WarningLetter />} />
+        <Route path="/super-admin/employer/onboarding/complaint-letter" element={<ComplaintLetter />} />
         <Route path="/super-admin/employer/offboarding" element={<Offboarding />} />
+        <Route path="/super-admin/employer/offboarding/resignation-acceptance" element={<ResignationAcceptanceLetter />} />
+        <Route path="/super-admin/employer/offboarding/termination-letter" element={<OffboardingTerminationLetter />} />
+        <Route path="/super-admin/employer/offboarding/experience-letter" element={<ExperienceLetter />} />
+        <Route path="/super-admin/employer/offboarding/relieving-letter" element={<RelievingLetter />} />
+        <Route path="/super-admin/employer/offboarding/fnf-settlement" element={<FNFSettlement />} />
+        <Route path="/super-admin/employer/offboarding/no-dues" element={<NoDues />} />
+        <Route path="/super-admin/employer/offboarding/exit-interview" element={<ExitInterview />} />
+        <Route path="/super-admin/employer/offboarding/nda-reminder" element={<NDAReminder />} />
         <Route path="/super-admin/employer/training" element={<Training />} />
         <Route path="/super-admin/employer/assets" element={<Assets />} />
         <Route path="/super-admin/employer/expenses" element={<Expenses />} />
@@ -197,7 +223,19 @@ function App() {
           <Route path="recruitment/career-page" element={<Recruitment />} />
           <Route path="recruitment/view-live-page" element={<Recruitment />} />
           <Route path="onboarding" element={<Onboarding />} />
+          <Route path="onboarding/offer-letter" element={<OfferLetter />} />
+          <Route path="onboarding/contact-letter" element={<ContactLetter />} />
+          <Route path="onboarding/warning-letter" element={<WarningLetter />} />
+          <Route path="onboarding/complaint-letter" element={<ComplaintLetter />} />
           <Route path="offboarding" element={<Offboarding />} />
+          <Route path="offboarding/resignation-acceptance" element={<ResignationAcceptanceLetter />} />
+          <Route path="offboarding/termination-letter" element={<OffboardingTerminationLetter />} />
+          <Route path="offboarding/experience-letter" element={<ExperienceLetter />} />
+          <Route path="offboarding/relieving-letter" element={<RelievingLetter />} />
+          <Route path="offboarding/fnf-settlement" element={<FNFSettlement />} />
+          <Route path="offboarding/no-dues" element={<NoDues />} />
+          <Route path="offboarding/exit-interview" element={<ExitInterview />} />
+          <Route path="offboarding/nda-reminder" element={<NDAReminder />} />
           <Route path="training" element={<Training />} />
           <Route path="assets" element={<Assets />} />
           <Route path="expenses" element={<Expenses />} />

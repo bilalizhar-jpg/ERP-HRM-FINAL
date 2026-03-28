@@ -87,7 +87,6 @@ export const employerModules: ModuleItem[] = [
       { name: 'OFFER LETTER', path: '/offer-letter' },
       { name: 'CONTACT LETTER', path: '/contact-letter' },
       { name: 'WARNING LETTER', path: '/warning-letter' },
-      { name: 'TERMINATION LETTER', path: '/termination-letter' },
       { name: 'COMPLAINT LETTER', path: '/complaint-letter' },
     ]
   },
