@@ -97,7 +97,6 @@ export const employerModules: ModuleItem[] = [
     hasDropdown: true,
     subItems: [
       { name: 'RESIGNATION ACCEPTANCE LETTER', path: '/resignation-acceptance' },
-      { name: 'TERMINATION LETTER', path: '/termination-letter' },
       { name: 'EXPERIENCE LETTER', path: '/experience-letter' },
       { name: 'RELIEVING LETTER', path: '/relieving-letter' },
       { name: 'FULL & FINAL SETTLEMENT (FNF)', path: '/fnf-settlement' },
@@ -123,7 +122,17 @@ export const employerModules: ModuleItem[] = [
     ]
   },
   { name: 'PERFORMANCE', icon: Target, path: '/super-admin/employer/performance' },
-  { name: 'ASSETS', icon: Laptop, path: '/super-admin/employer/assets' },
+  { 
+    name: 'ASSETS', 
+    icon: Laptop, 
+    path: '/super-admin/employer/assets',
+    hasDropdown: true,
+    subItems: [
+      { name: 'COMPANY ASSET MANAGEMENT', path: '' },
+      { name: 'ASSET TYPES', path: '/types' },
+      { name: 'ITEM REQUESTS', path: '/requests' },
+    ]
+  },
   { name: 'EXPENSES', icon: Receipt, path: '/super-admin/employer/expenses' },
   { name: 'PROJECT MANAGEMENT', icon: ClipboardList, path: '/super-admin/employer/projects' },
   { name: 'MARKETING', icon: Megaphone, path: '/super-admin/employer/marketing' },

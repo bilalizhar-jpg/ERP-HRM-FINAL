@@ -2,7 +2,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
   FileCheck, 
-  UserX, 
   Award, 
   FileText,
   ChevronRight,
@@ -20,13 +19,6 @@ const offboardingModules = [
     icon: FileCheck,
     path: '/super-admin/employer/offboarding/resignation-acceptance',
     color: 'bg-emerald-50 text-emerald-600'
-  },
-  { 
-    name: 'Termination Letter', 
-    description: 'Generate and manage termination notices.',
-    icon: UserX,
-    path: '/super-admin/employer/offboarding/termination-letter',
-    color: 'bg-rose-50 text-rose-600'
   },
   { 
     name: 'Experience Letter', 

@@ -45,6 +45,8 @@ import JobsList from './pages/employer/JobsList';
 import PostJob from './pages/employer/PostJob';
 import Training from './pages/employer/Training';
 import Assets from './pages/employer/Assets';
+import AssetTypes from './pages/employer/AssetTypes';
+import ItemRequests from './pages/employer/ItemRequests';
 import Expenses from './pages/employer/Expenses';
 import Reports from './pages/employer/Reports';
 import Settings from './pages/employer/Settings';
@@ -58,7 +60,6 @@ import WarningLetter from './pages/employer/onboarding/WarningLetter';
 import ComplaintLetter from './pages/employer/onboarding/ComplaintLetter';
 import Offboarding from './pages/employer/Offboarding';
 import ResignationAcceptanceLetter from './pages/employer/offboarding/ResignationAcceptanceLetter';
-import OffboardingTerminationLetter from './pages/employer/offboarding/TerminationLetter';
 import ExperienceLetter from './pages/employer/offboarding/ExperienceLetter';
 import RelievingLetter from './pages/employer/offboarding/RelievingLetter';
 import FNFSettlement from './pages/employer/offboarding/FNFSettlement';
@@ -91,7 +92,7 @@ import EmployeeLeaves from './pages/EmployeeLeaves';
 import EmployeePayroll from './pages/EmployeePayroll';
 import EmployeeLogin from './pages/EmployeeLogin';
 import EmployeeDashboard from './pages/EmployeeDashboard';
-import GlobalAIAssistant from './components/GlobalAIAssistant';
+import EmployeeItemRequest from './pages/EmployeeItemRequest';
 
 function Home() {
   return (
@@ -117,7 +118,6 @@ function Home() {
 function App() {
   return (
     <Router>
-      <GlobalAIAssistant />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/contact-us" element={<ContactUs />} />
@@ -169,7 +169,6 @@ function App() {
         <Route path="/super-admin/employer/onboarding/complaint-letter" element={<ComplaintLetter />} />
         <Route path="/super-admin/employer/offboarding" element={<Offboarding />} />
         <Route path="/super-admin/employer/offboarding/resignation-acceptance" element={<ResignationAcceptanceLetter />} />
-        <Route path="/super-admin/employer/offboarding/termination-letter" element={<OffboardingTerminationLetter />} />
         <Route path="/super-admin/employer/offboarding/experience-letter" element={<ExperienceLetter />} />
         <Route path="/super-admin/employer/offboarding/relieving-letter" element={<RelievingLetter />} />
         <Route path="/super-admin/employer/offboarding/fnf-settlement" element={<FNFSettlement />} />
@@ -178,6 +177,8 @@ function App() {
         <Route path="/super-admin/employer/offboarding/nda-reminder" element={<NDAReminder />} />
         <Route path="/super-admin/employer/training" element={<Training />} />
         <Route path="/super-admin/employer/assets" element={<Assets />} />
+        <Route path="/super-admin/employer/assets/types" element={<AssetTypes />} />
+        <Route path="/super-admin/employer/assets/requests" element={<ItemRequests />} />
         <Route path="/super-admin/employer/expenses" element={<Expenses />} />
         <Route path="/super-admin/employer/notice-board" element={<NoticeBoard />} />
         <Route path="/super-admin/employer/projects" element={<ProjectManagement />} />
@@ -229,7 +230,6 @@ function App() {
           <Route path="onboarding/complaint-letter" element={<ComplaintLetter />} />
           <Route path="offboarding" element={<Offboarding />} />
           <Route path="offboarding/resignation-acceptance" element={<ResignationAcceptanceLetter />} />
-          <Route path="offboarding/termination-letter" element={<OffboardingTerminationLetter />} />
           <Route path="offboarding/experience-letter" element={<ExperienceLetter />} />
           <Route path="offboarding/relieving-letter" element={<RelievingLetter />} />
           <Route path="offboarding/fnf-settlement" element={<FNFSettlement />} />
@@ -263,6 +263,7 @@ function App() {
           <Route path="leaves" element={<EmployeeLeaves />} />
           <Route path="payroll" element={<EmployeePayroll />} />
           <Route path="assets" element={<Assets />} />
+          <Route path="assets/request" element={<EmployeeItemRequest />} />
           <Route path="message" element={<Message />} />
         </Route>
       </Routes>

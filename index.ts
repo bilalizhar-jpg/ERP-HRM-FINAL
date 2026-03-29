@@ -13,7 +13,6 @@ import makeWASocket, {
   makeCacheableSignalKeyStore
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
-import pino from "pino";
 import QRCode from "qrcode";
 import fs from "fs";
 import { join } from "path";
@@ -42,6 +41,20 @@ interface AttendanceRecord {
   created_at?: Date;
 }
 
+interface AlertSetting {
+  company_id: number;
+  message_template: string;
+  grace_time?: number;
+  idle_minutes?: number;
+}
+
+interface EmployeeRow {
+  id: number;
+  name: string;
+  mobile: string;
+  last_activity_time?: string;
+}
+
 const __filename = typeof import.meta !== 'undefined' ? fileURLToPath(import.meta.url) : (globalThis as Record<string, unknown>).__filename as string;
 const __dirname = typeof import.meta !== 'undefined' ? path.dirname(__filename) : (globalThis as Record<string, unknown>).__dirname as string;
 
@@ -56,11 +69,6 @@ async function startServer() {
 
   const app = express();
   const PORT = process.env.PORT || 3000;
-
-  // WhatsApp Service Logic
-  const sessions = new Map<number, ReturnType<typeof makeWASocket>>();
-  const qrCodes = new Map<number, string>();
-  const logger = pino({ level: "silent" });
 
   console.log("Starting server...");
   console.log(`Environment: ${process.env.NODE_ENV}`);
@@ -141,10 +149,10 @@ async function startServer() {
         const [welcomeSettings] = await connection.query(
           "SELECT * FROM employee_welcome_settings WHERE company_id = ? AND is_active = TRUE",
           [company_id]
-        ) as [any[], any];
+        ) as [unknown[], unknown];
 
         if (welcomeSettings.length > 0 && mobile_no) {
-          const setting = welcomeSettings[0];
+          const setting = (welcomeSettings as AlertSetting[])[0];
           const template = setting.message_template || "Dear {{employee_name}},\nWelcome to the company.\n\nYour login details are:\nUsername: {{username}}\nPassword: {{password}}\n\nPlease login and update your password.\n\nThank you";
           
           let message = template.replace(/{{employee_name}}/g, name || '');
@@ -1276,8 +1284,8 @@ async function startServer() {
       connection = await db.getConnection();
       const [rows] = await connection.query("DESCRIBE shifts");
       res.json(rows);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+    } catch (err: unknown) {
+      res.status(500).json({ error: (err as Error).message });
     } finally {
       if (connection) connection.release();
     }
@@ -2591,7 +2599,7 @@ async function startServer() {
       const [rows] = await connection.query(
         "SELECT * FROM employee_welcome_settings WHERE company_id = ?",
         [companyId]
-      ) as [any[], any];
+      ) as [unknown[], unknown];
       
       if (rows.length > 0) {
         res.json(rows[0]);
@@ -2617,7 +2625,7 @@ async function startServer() {
       const [existing] = await connection.query(
         "SELECT id FROM employee_welcome_settings WHERE company_id = ?",
         [companyId]
-      ) as [any[], any];
+      ) as [unknown[], unknown];
 
       if (existing.length > 0) {
         await connection.query(
@@ -2650,7 +2658,7 @@ async function startServer() {
       const [rows] = await connection.query(
         "SELECT * FROM idle_alert_settings WHERE company_id = ?",
         [companyId]
-      ) as [any[], any];
+      ) as [unknown[], unknown];
       
       if (rows.length > 0) {
         res.json(rows[0]);
@@ -2676,7 +2684,7 @@ async function startServer() {
       const [existing] = await connection.query(
         "SELECT id FROM idle_alert_settings WHERE company_id = ?",
         [companyId]
-      ) as [any[], any];
+      ) as [unknown[], unknown];
 
       if (existing.length > 0) {
         await connection.query(
@@ -2709,7 +2717,7 @@ async function startServer() {
       const [rows] = await connection.query(
         "SELECT * FROM attendance_alert_settings WHERE company_id = ?",
         [companyId]
-      ) as [any[], any];
+      ) as [unknown[], unknown];
       
       if (rows.length > 0) {
         res.json(rows[0]);
@@ -2735,7 +2743,7 @@ async function startServer() {
       const [existing] = await connection.query(
         "SELECT id FROM attendance_alert_settings WHERE company_id = ?",
         [company_id]
-      ) as [any[], any];
+      ) as [unknown[], unknown];
 
       if (existing.length > 0) {
         await connection.query(
@@ -3250,11 +3258,10 @@ async function startServer() {
       const [settings] = await connection.query(`
         SELECT * FROM attendance_alert_settings 
         WHERE is_active = TRUE AND TIME_FORMAT(trigger_time, '%H:%i') = ?
-      `, [currentTime]) as [any[], any];
+      `, [currentTime]) as [unknown[], unknown];
 
-      for (const setting of settings) {
+      for (const setting of settings as AlertSetting[]) {
         const companyId = setting.company_id;
-        const graceTime = setting.grace_time;
         const template = setting.message_template;
 
         const [lateEmployees] = await connection.query(`
@@ -3264,15 +3271,15 @@ async function startServer() {
           WHERE e.company_id = ? 
           AND e.status = 'active'
           AND a.id IS NULL
-        `, [todayStr, companyId]) as [any[], any];
+        `, [todayStr, companyId]) as [unknown[], unknown];
 
-        for (const emp of lateEmployees) {
+        for (const emp of lateEmployees as EmployeeRow[]) {
           if (!emp.phone) continue;
 
           const [existingLogs] = await connection.query(`
             SELECT id FROM whatsapp_logs 
             WHERE company_id = ? AND employee_id = ? AND type = 'attendance_alert' AND DATE(sent_at) = ?
-          `, [companyId, emp.id, todayStr]) as [any[], any];
+          `, [companyId, emp.id, todayStr]) as [unknown[], unknown];
 
           if (existingLogs.length > 0) continue;
 
@@ -3289,12 +3296,12 @@ async function startServer() {
           const sock = sessions.get(Number(companyId));
           if (sock) {
             try {
-              const sentMsg = await sock.sendMessage(phone, { text: message });
+              await sock.sendMessage(phone, { text: message });
               await connection.query(`
                 INSERT INTO whatsapp_logs (company_id, employee_id, phone_number, message, status, type)
                 VALUES (?, ?, ?, ?, 'sent', 'attendance_alert')
               `, [companyId, emp.id, phone, message]);
-            } catch (err) {
+            } catch {
               await connection.query(`
                 INSERT INTO whatsapp_logs (company_id, employee_id, phone_number, message, status, type)
                 VALUES (?, ?, ?, ?, 'failed', 'attendance_alert')
@@ -3321,9 +3328,9 @@ async function startServer() {
       
       const [settings] = await connection.query(`
         SELECT * FROM idle_alert_settings WHERE is_active = TRUE
-      `) as [any[], any];
+      `) as [unknown[], unknown];
 
-      for (const setting of settings) {
+      for (const setting of settings as AlertSetting[]) {
         const companyId = setting.company_id;
         const idleMinutes = setting.idle_minutes;
         const template = setting.message_template || "Dear {{employee_name}}, you have been inactive for {{idle_minutes}} minutes. Please resume your work.";
@@ -3335,9 +3342,9 @@ async function startServer() {
           WHERE e.company_id = ? 
           AND e.status = 'active'
           AND TIMESTAMPDIFF(MINUTE, t.last_activity_time, NOW()) >= ?
-        `, [companyId, idleMinutes]) as [any[], any];
+        `, [companyId, idleMinutes]) as [unknown[], unknown];
 
-        for (const emp of idleEmployees) {
+        for (const emp of idleEmployees as EmployeeRow[]) {
           if (!emp.phone) continue;
 
           // Check if we already sent an alert for this specific last_activity_time
@@ -3345,7 +3352,7 @@ async function startServer() {
             SELECT id FROM whatsapp_logs 
             WHERE company_id = ? AND employee_id = ? AND type = 'idle_alert' 
             AND sent_at > ?
-          `, [companyId, emp.id, emp.last_activity_time]) as [any[], any];
+          `, [companyId, emp.id, emp.last_activity_time]) as [unknown[], unknown];
 
           if (existingLogs.length > 0) continue; // Already sent an alert for this idle period
 
@@ -3368,7 +3375,7 @@ async function startServer() {
                 INSERT INTO whatsapp_logs (company_id, employee_id, phone_number, message, status, type)
                 VALUES (?, ?, ?, ?, 'sent', 'idle_alert')
               `, [companyId, emp.id, phone, message]);
-            } catch (err) {
+            } catch {
               await connection.query(`
                 INSERT INTO whatsapp_logs (company_id, employee_id, phone_number, message, status, type)
                 VALUES (?, ?, ?, ?, 'failed', 'idle_alert')

@@ -19,7 +19,7 @@ export default function ManageEmployeeSalary() {
   const location = useLocation();
   const navigate = useNavigate();
   const isSuperAdminPath = location.pathname.startsWith('/super-admin');
-  const basePath = isSuperAdminPath ? '/super-admin/employer' : '/employer';
+  const basePath = isSuperAdminPath ? '/super-admin/employer' : '/company-admin';
 
   const [searchTerm, setSearchTerm] = useState('');
   const [entries, setEntries] = useState(10);

@@ -14,7 +14,7 @@ export default function SalaryGenerate() {
   const location = useLocation();
   const navigate = useNavigate();
   const isSuperAdminPath = location.pathname.startsWith('/super-admin');
-  const basePath = isSuperAdminPath ? '/super-admin/employer' : '/employer';
+  const basePath = isSuperAdminPath ? '/super-admin/employer' : '/company-admin';
 
   const [salaryMonth, setSalaryMonth] = useState('2026-03');
 
