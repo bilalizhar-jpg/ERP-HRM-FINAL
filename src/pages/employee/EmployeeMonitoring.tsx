@@ -11,7 +11,9 @@ import {
   PlayCircle,
   Calendar as CalendarIcon, 
   Download,
-  Layout
+  Layout,
+  Keyboard,
+  MapPin
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -23,7 +25,9 @@ import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  LineChart,
+  Line
 } from 'recharts';
 
 const weeklyData = [
@@ -65,6 +69,24 @@ const timeLogs = [
   { date: '2026-03-25', firstActivity: '08:50 AM', lastActivity: '05:10 PM', totalTime: '8h 20m', activeTime: '7h 40m', productivity: 95 },
 ];
 
+const inputActivityData = [
+  { time: '09:00', keystrokes: 350, clicks: 120 },
+  { time: '10:00', keystrokes: 420, clicks: 150 },
+  { time: '11:00', keystrokes: 210, clicks: 80 },
+  { time: '12:00', keystrokes: 45, clicks: 20 },
+  { time: '13:00', keystrokes: 380, clicks: 140 },
+  { time: '14:00', keystrokes: 410, clicks: 160 },
+  { time: '15:00', keystrokes: 290, clicks: 110 },
+  { time: '16:00', keystrokes: 320, clicks: 130 },
+];
+
+const locationData = [
+  { id: 1, time: '09:00 AM', location: 'New York, NY (Office)', ip: '192.168.1.100', status: 'Clock In' },
+  { id: 2, time: '11:30 AM', location: 'New York, NY (Office)', ip: '192.168.1.100', status: 'Periodic Check' },
+  { id: 3, time: '02:15 PM', location: 'New York, NY (Office)', ip: '192.168.1.100', status: 'Periodic Check' },
+  { id: 4, time: '05:30 PM', location: 'New York, NY (Office)', ip: '192.168.1.100', status: 'Clock Out' },
+];
+
 const mockScreenshots = [
   { id: 1, time: '10:15 AM', app: 'VS Code', url: 'https://picsum.photos/seed/code1/400/250' },
   { id: 2, time: '10:25 AM', app: 'Chrome (GitHub)', url: 'https://picsum.photos/seed/github/400/250' },
@@ -82,6 +104,7 @@ export default function EmployeeMonitoring() {
     { id: 'overview', label: 'Overview', icon: Layout },
     { id: 'timeline', label: 'Timeline', icon: Clock },
     { id: 'activity', label: 'Activity', icon: Monitor },
+    { id: 'location', label: 'Location', icon: MapPin },
     { id: 'logs', label: 'Time Logs', icon: CalendarIcon },
     { id: 'screenshots', label: 'Screenshots', icon: ImageIcon },
   ];
@@ -120,7 +143,7 @@ export default function EmployeeMonitoring() {
         <div>
           <h4 className="text-sm font-bold text-blue-900 mb-1">Transparency & Privacy Note</h4>
           <p className="text-sm text-blue-800 leading-relaxed">
-            Your employer is currently tracking your <strong>active time, application usage, and website visits</strong> during your work hours to help measure productivity. Screenshots are <strong>enabled</strong> and taken periodically. This data is only recorded while you are clocked in. You have full access to view everything that is being recorded below.
+            Your employer is currently tracking your <strong>active time, application usage, website visits, mouse/keyboard activity, and location</strong> during your work hours to help measure productivity. Screenshots are <strong>enabled</strong> and taken periodically. This data is only recorded while you are clocked in. You have full access to view everything that is being recorded below.
           </p>
         </div>
       </div>
@@ -346,6 +369,71 @@ export default function EmployeeMonitoring() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+
+            {/* Input Activity */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
+              <div className="flex items-center gap-2 mb-6">
+                <Keyboard size={20} className="text-slate-400" />
+                <h3 className="text-lg font-bold text-slate-900">Keyboard & Mouse Activity</h3>
+              </div>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={inputActivityData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                    <Tooltip contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0' }} />
+                    <Line yAxisId="left" type="monotone" dataKey="keystrokes" stroke="#3b82f6" strokeWidth={2} name="Keystrokes" />
+                    <Line yAxisId="right" type="monotone" dataKey="clicks" stroke="#10b981" strokeWidth={2} name="Mouse Clicks" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* LOCATION TAB */}
+        {activeTab === 'location' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-900">Location History</h3>
+                <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
+                  <MapPin size={16} className="text-blue-500" />
+                  IP-based location tracking
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left bg-slate-50/50">
+                      <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Time</th>
+                      <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Location</th>
+                      <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">IP Address</th>
+                      <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Event</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {locationData.map((loc) => (
+                      <tr key={loc.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 text-sm font-bold text-slate-900">{loc.time}</td>
+                        <td className="px-6 py-4 text-sm text-slate-600 flex items-center gap-2">
+                          <MapPin size={14} className="text-slate-400" />
+                          {loc.location}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-500 font-mono">{loc.ip}</td>
+                        <td className="px-6 py-4">
+                          <span className="text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg">
+                            {loc.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
