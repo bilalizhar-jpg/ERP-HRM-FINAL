@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Clock, 
   Monitor, 
@@ -13,7 +13,9 @@ import {
   Download,
   Layout,
   Keyboard,
-  MapPin
+  MapPin,
+  Play,
+  Square
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -100,6 +102,124 @@ export default function EmployeeMonitoring() {
   const [activeTab, setActiveTab] = useState('overview');
   const [dateRange, setDateRange] = useState('Today');
 
+  // Real-time tracking state
+  const [isTracking, setIsTracking] = useState(false);
+  const [sessionKeys, setSessionKeys] = useState(0);
+  const [sessionClicks, setSessionClicks] = useState(0);
+  const [realScreenshots, setRealScreenshots] = useState<any[]>([]);
+  const [realInputData, setRealInputData] = useState<any[]>([]);
+  const [realLocationData, setRealLocationData] = useState<any[]>([]);
+  
+  const streamRef = useRef<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const startTracking = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ 
+        video: { displaySurface: 'monitor' } 
+      });
+      streamRef.current = stream;
+
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+      videoRef.current = video;
+
+      setIsTracking(true);
+      setRealInputData([{ time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), keystrokes: 0, clicks: 0 }]);
+
+      // Get real location
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition((position) => {
+          const { latitude, longitude } = position.coords;
+          const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          setRealLocationData(prev => [{
+            id: Date.now(),
+            time,
+            location: `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`,
+            ip: 'Local Network',
+            status: 'Clock In'
+          }, ...prev]);
+        }, (error) => {
+          console.error("Error getting location:", error);
+        });
+      }
+
+      stream.getVideoTracks()[0].onended = () => {
+        stopTracking();
+      };
+    } catch (err) {
+      console.error("Error sharing screen:", err);
+      alert("Screen sharing permission is required to start tracking.");
+    }
+  };
+
+  const stopTracking = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsTracking(false);
+  };
+
+  // Screenshot interval (every 30 seconds for demonstration)
+  useEffect(() => {
+    if (!isTracking) return;
+
+    const interval = setInterval(() => {
+      if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          const url = canvas.toDataURL('image/jpeg', 0.5);
+          const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const trackLabel = streamRef.current?.getVideoTracks()[0]?.label || 'Screen Capture';
+          
+          setRealScreenshots(prev => [{ id: Date.now(), time, app: trackLabel, url }, ...prev]);
+        }
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [isTracking]);
+
+  // Mouse/Keyboard tracking
+  useEffect(() => {
+    if (!isTracking) return;
+
+    const handleKeyDown = () => setSessionKeys(k => k + 1);
+    const handleClick = () => setSessionClicks(c => c + 1);
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('click', handleClick);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('click', handleClick);
+    };
+  }, [isTracking]);
+
+  // Aggregate data every minute for the chart
+  useEffect(() => {
+    if (!isTracking) return;
+
+    const interval = setInterval(() => {
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setRealInputData(prev => {
+        const newData = [...prev, { time, keystrokes: sessionKeys, clicks: sessionClicks }];
+        if (newData.length > 10) return newData.slice(newData.length - 10);
+        return newData;
+      });
+      setSessionKeys(0);
+      setSessionClicks(0);
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [isTracking, sessionKeys, sessionClicks]);
+
   const tabs = [
     { id: 'overview', label: 'Overview', icon: Layout },
     { id: 'timeline', label: 'Timeline', icon: Clock },
@@ -131,6 +251,15 @@ export default function EmployeeMonitoring() {
           <button className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors shadow-sm">
             <Download size={18} />
             Export
+          </button>
+          <button 
+            onClick={isTracking ? stopTracking : startTracking}
+            className={`flex items-center gap-2 px-6 py-2 rounded-xl text-white font-bold transition-colors shadow-lg ${
+              isTracking ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
+            }`}
+          >
+            {isTracking ? <Square size={18} /> : <Play size={18} />}
+            {isTracking ? 'Stop Tracking' : 'Start Tracking'}
           </button>
         </div>
       </div>
@@ -374,13 +503,21 @@ export default function EmployeeMonitoring() {
 
             {/* Input Activity */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
-              <div className="flex items-center gap-2 mb-6">
-                <Keyboard size={20} className="text-slate-400" />
-                <h3 className="text-lg font-bold text-slate-900">Keyboard & Mouse Activity</h3>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <Keyboard size={20} className="text-slate-400" />
+                  <h3 className="text-lg font-bold text-slate-900">Keyboard & Mouse Activity</h3>
+                </div>
+                {isTracking && (
+                  <div className="flex gap-4 text-sm font-bold">
+                    <span className="text-blue-600">Keys: {sessionKeys}</span>
+                    <span className="text-emerald-600">Clicks: {sessionClicks}</span>
+                  </div>
+                )}
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={inputActivityData}>
+                  <LineChart data={realInputData.length > 0 ? realInputData : inputActivityData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
                     <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
@@ -417,7 +554,7 @@ export default function EmployeeMonitoring() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {locationData.map((loc) => (
+                    {(realLocationData.length > 0 ? realLocationData : locationData).map((loc) => (
                       <tr key={loc.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 text-sm font-bold text-slate-900">{loc.time}</td>
                         <td className="px-6 py-4 text-sm text-slate-600 flex items-center gap-2">
@@ -487,12 +624,12 @@ export default function EmployeeMonitoring() {
               <h3 className="text-lg font-bold text-slate-900">Recent Screenshots</h3>
               <div className="flex items-center gap-2 text-sm text-slate-500 bg-white px-4 py-2 rounded-xl border border-slate-200">
                 <Info size={16} className="text-blue-500" />
-                Screenshots are taken every 10 minutes while active.
+                Screenshots are taken every 30 seconds while active.
               </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {mockScreenshots.map((shot) => (
+              {(realScreenshots.length > 0 ? realScreenshots : mockScreenshots).map((shot) => (
                 <div key={shot.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden group cursor-pointer hover:shadow-md transition-all">
                   <div className="relative aspect-video bg-slate-100 overflow-hidden">
                     <img 
