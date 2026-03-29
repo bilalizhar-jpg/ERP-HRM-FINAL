@@ -7,7 +7,8 @@ import {
   Bell, 
   DollarSign, 
   Laptop, 
-  MessageSquare 
+  MessageSquare,
+  Monitor
 } from 'lucide-react';
 
 export default function EmployeeSidebar() {
@@ -26,6 +27,7 @@ export default function EmployeeSidebar() {
     { name: 'Notice Board', path: '/employee/notice-board', icon: Bell },
     { name: 'Payroll', path: '/employee/payroll', icon: DollarSign },
     { name: 'Asset', path: '/employee/assets', icon: Laptop },
+    { name: 'My Monitoring', path: '/employee/monitoring', icon: Monitor },
     { name: 'Message', path: '/employee/message', icon: MessageSquare },
   ];
 

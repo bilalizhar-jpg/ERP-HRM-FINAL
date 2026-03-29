@@ -1,7 +1,6 @@
 import { Outlet, Link, useNavigate, Navigate } from 'react-router-dom';
 import EmployeeSidebar from './EmployeeSidebar';
 import { ArrowLeft, LogOut } from 'lucide-react';
-import { TimeTrackingProvider } from '../contexts/TimeTrackingContext';
 
 export default function EmployeeLayout() {
   const navigate = useNavigate();
@@ -16,7 +15,6 @@ export default function EmployeeLayout() {
     navigate('/');
   };
   return (
-    <TimeTrackingProvider>
       <div className="flex h-screen bg-[#f8f9fa] overflow-hidden">
         <EmployeeSidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -48,6 +46,5 @@ export default function EmployeeLayout() {
           </main>
         </div>
       </div>
-    </TimeTrackingProvider>
   );
 }

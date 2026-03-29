@@ -14,6 +14,7 @@ import {
   DollarSign, 
   Target, 
   Laptop, 
+  Monitor,
   ClipboardList, 
   Megaphone, 
   FileText, 
@@ -44,7 +45,16 @@ export interface ModuleItem {
 
 export const employerModules: ModuleItem[] = [
   { name: 'DASHBOARD', icon: LayoutDashboard, path: '/super-admin/employer/dashboard' },
-  { name: 'TIME TRACK', icon: Clock, path: '/super-admin/employer/time-track' },
+  { 
+    name: 'EMPLOYEE MONITORING', 
+    icon: Monitor, 
+    path: '/super-admin/employer/monitoring',
+    hasDropdown: true,
+    subItems: [
+      { name: 'DASHBOARD', path: '' },
+      { name: 'REPORTS', path: '/reports' },
+    ]
+  },
   { 
     name: 'ORG CHART', 
     icon: Network, 
@@ -134,7 +144,20 @@ export const employerModules: ModuleItem[] = [
     ]
   },
   { name: 'EXPENSES', icon: Receipt, path: '/super-admin/employer/expenses' },
-  { name: 'PROJECT MANAGEMENT', icon: ClipboardList, path: '/super-admin/employer/projects' },
+  { 
+    name: 'PROJECT MANAGEMENT', 
+    icon: ClipboardList, 
+    path: '/super-admin/employer/projects',
+    hasDropdown: true,
+    subItems: [
+      { name: 'PROJECTS', path: '/list' },
+      { name: 'MY TASK', path: '/my-tasks' },
+      { name: 'WORK SPACE TASKS', path: '/workspace-tasks' },
+      { name: 'MILESTONE', path: '/milestones' },
+      { name: 'BIDDER DETAILS', path: '/bidder-details' },
+      { name: 'REPORTS', path: '/reports' },
+    ]
+  },
   { name: 'MARKETING', icon: Megaphone, path: '/super-admin/employer/marketing' },
   { name: 'REPORTS', icon: FileText, path: '/super-admin/employer/reports' },
   { name: 'REWARD POINTS', icon: CircleDot, path: '/super-admin/employer/rewards' },

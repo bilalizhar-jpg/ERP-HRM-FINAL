@@ -2,7 +2,7 @@ import { Users, UserPlus, DollarSign, Briefcase, BarChart3, Truck } from 'lucide
 
 export default function CoreModules() {
   const modules = [
-    { icon: Users, title: 'HRM', description: 'Human Resource Management', details: ['Employee Management', 'Attendance Tracking', 'Time Tracking', 'Leave Management', 'Awards & Recognition', 'Org Chart'] },
+    { icon: Users, title: 'HRM', description: 'Human Resource Management', details: ['Employee Management', 'Attendance Tracking', 'Leave Management', 'Awards & Recognition', 'Org Chart'] },
     { icon: UserPlus, title: 'Recruitment', description: 'Applicant Tracking System', details: ['Applicant Tracking', 'Candidate Database', 'Job Posting', 'Onboarding'] },
     { icon: DollarSign, title: 'Payroll & Finance', description: 'Financial Management', details: ['Payroll Processing', 'Salary Management', 'Invoice Generation', 'Account Management', 'Tax Reports', 'Expense Tracking'] },
     { icon: Briefcase, title: 'Project Management', description: 'Task & Team Collaboration', details: ['Task Tracking', 'Team Collaboration', 'Performance Analytics', 'Gantt Charts', 'Milestone Tracking', 'Resource Allocation'] },

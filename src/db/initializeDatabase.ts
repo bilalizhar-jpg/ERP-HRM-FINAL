@@ -531,69 +531,105 @@ export async function initializeDatabase(connection: Connection) {
     )
   `);
 
-  // Create time tracking tables
+  // Create monitoring tables
   await connection.query(`
-    CREATE TABLE IF NOT EXISTS time_tracking_settings (
+    CREATE TABLE IF NOT EXISTS monitoring_settings (
       id INT AUTO_INCREMENT PRIMARY KEY,
       company_id INT NOT NULL,
       employee_id INT NOT NULL,
-      status ENUM('active', 'deactive') DEFAULT 'deactive',
-      auto_mode ENUM('on', 'off') DEFAULT 'off',
       is_enabled BOOLEAN DEFAULT FALSE,
-      screenshot_enabled BOOLEAN DEFAULT FALSE,
-      screenshot_interval INT DEFAULT 10,
-      idle_threshold INT DEFAULT 5,
+      track_mouse_clicks BOOLEAN DEFAULT TRUE,
+      track_keyboard_activity BOOLEAN DEFAULT TRUE,
+      track_apps BOOLEAN DEFAULT TRUE,
+      track_internet BOOLEAN DEFAULT TRUE,
+      track_location BOOLEAN DEFAULT TRUE,
+      idle_threshold_minutes INT DEFAULT 5,
+      screenshot_interval_minutes INT DEFAULT 10,
       UNIQUE KEY company_employee (company_id, employee_id),
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
       FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
     )
   `);
 
-  // Ensure id column exists and is primary key if table was already created
-  try {
-    await connection.query("ALTER TABLE time_tracking_settings ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY FIRST");
-  } catch { /* Ignore */ }
-  try {
-    await connection.query("ALTER TABLE time_tracking_settings ADD UNIQUE KEY company_employee (company_id, employee_id)");
-  } catch { /* Ignore */ }
-
-  // Ensure status and auto_mode columns exist if table was already created
-  try {
-    await connection.query("ALTER TABLE time_tracking_settings ADD COLUMN status ENUM('active', 'deactive') DEFAULT 'deactive'");
-  } catch { /* Ignore */ }
-  try {
-    await connection.query("ALTER TABLE time_tracking_settings ADD COLUMN auto_mode ENUM('on', 'off') DEFAULT 'off'");
-  } catch { /* Ignore */ }
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS monitoring_company_settings (
+      company_id INT PRIMARY KEY,
+      idle_threshold_minutes INT DEFAULT 5,
+      screenshot_enabled BOOLEAN DEFAULT TRUE,
+      screenshot_interval_minutes INT DEFAULT 10,
+      track_apps BOOLEAN DEFAULT TRUE,
+      track_internet BOOLEAN DEFAULT TRUE,
+      track_mouse_clicks BOOLEAN DEFAULT TRUE,
+      track_keyboard_activity BOOLEAN DEFAULT TRUE,
+      track_location BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    )
+  `);
 
   await connection.query(`
-    CREATE TABLE IF NOT EXISTS time_tracking_logs (
+    CREATE TABLE IF NOT EXISTS monitoring_activities (
       id INT AUTO_INCREMENT PRIMARY KEY,
       company_id INT NOT NULL,
       employee_id INT NOT NULL,
-      date DATE NOT NULL,
-      hour INT NOT NULL,
-      active_minutes FLOAT DEFAULT 0,
-      idle_minutes FLOAT DEFAULT 0,
-      keystrokes INT DEFAULT 0,
-      mouse_clicks INT DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY unique_log (employee_id, date, hour),
+      activity_type ENUM('app', 'website') NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      title VARCHAR(500),
+      url TEXT,
+      start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      end_time TIMESTAMP NULL,
+      duration_seconds INT DEFAULT 0,
+      is_productive BOOLEAN DEFAULT TRUE,
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
       FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
     )
   `);
 
   await connection.query(`
-    CREATE TABLE IF NOT EXISTS time_tracking_screenshots (
+    CREATE TABLE IF NOT EXISTS monitoring_app_classification (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      company_id INT NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      activity_type ENUM('app', 'website') NOT NULL,
+      category VARCHAR(100),
+      is_productive BOOLEAN DEFAULT TRUE,
+      UNIQUE KEY company_app (company_id, name, activity_type),
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    )
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS monitoring_locations (
       id INT AUTO_INCREMENT PRIMARY KEY,
       company_id INT NOT NULL,
       employee_id INT NOT NULL,
-      image_data LONGTEXT NOT NULL,
+      latitude DECIMAL(10, 8),
+      longitude DECIMAL(11, 8),
+      ip_address VARCHAR(45),
       timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
       FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
     )
   `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS monitoring_daily_stats (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      company_id INT NOT NULL,
+      employee_id INT NOT NULL,
+      date DATE NOT NULL,
+      active_seconds INT DEFAULT 0,
+      idle_seconds INT DEFAULT 0,
+      mouse_clicks INT DEFAULT 0,
+      keyboard_keystrokes INT DEFAULT 0,
+      productivity_score DECIMAL(5, 2) DEFAULT 0,
+      UNIQUE KEY emp_date (employee_id, date),
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+      FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+    )
+  `);
+
 
   // Create salary_slips table
   await connection.query(`
@@ -703,16 +739,6 @@ export async function initializeDatabase(connection: Connection) {
     )
   `);
 
-  // Create time_tracking table (assumed by user, creating if not exists)
-  await connection.query(`
-    CREATE TABLE IF NOT EXISTS time_tracking (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      employee_id INT NOT NULL,
-      last_activity_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY (employee_id),
-      FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-    )
-  `);
 
   // Create whatsapp_logs table
   await connection.query(`
@@ -879,4 +905,118 @@ export async function initializeDatabase(connection: Connection) {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Create projects table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      company_name VARCHAR(255) NOT NULL,
+      project_name VARCHAR(255) NOT NULL,
+      contact_person VARCHAR(255) NOT NULL,
+      project_type VARCHAR(255) NOT NULL,
+      duration VARCHAR(100) NOT NULL,
+      assigned_to VARCHAR(255) NOT NULL,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      timeline_milestones TEXT,
+      status VARCHAR(50) DEFAULT 'Active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Create tasks table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      status VARCHAR(50) DEFAULT 'To Do',
+      priority VARCHAR(50) DEFAULT 'Medium',
+      due_date DATE,
+      labels JSON,
+      assignees JSON,
+      image_url VARCHAR(255),
+      checklist JSON,
+      attachments JSON,
+      project_id INT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+    )
+  `);
+
+  // Create task_activities table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS task_activities (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      task_id INT NOT NULL,
+      user_name VARCHAR(255) NOT NULL,
+      user_avatar VARCHAR(255),
+      content TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Create labels table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS labels (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL UNIQUE,
+      color VARCHAR(50) NOT NULL
+    )
+  `);
+
+
+  // Seed default labels if empty
+  const [labelCountRows] = await connection.query('SELECT COUNT(*) as count FROM labels');
+  const labelCount = (labelCountRows as { count: number }[])[0].count;
+  if (labelCount === 0) {
+    await connection.query(`
+      INSERT INTO labels (name, color) VALUES 
+      ('Design', '#9333ea'),
+      ('Frontend', '#0891b2'),
+      ('Review Needed', '#c2410c'),
+      ('Enhancement', '#7c3aed'),
+      ('Backend', '#be123c'),
+      ('Bug', '#dc2626'),
+      ('Security', '#1e293b'),
+      ('DevOps', '#059669'),
+      ('Marketing', '#2563eb')
+    `);
+  }
+
+  // Seed sample tasks if empty
+  const [taskCountRows] = await connection.query('SELECT COUNT(*) as count FROM tasks');
+  const taskCount = (taskCountRows as { count: number }[])[0].count;
+  if (taskCount === 0) {
+    await connection.query(`
+      INSERT INTO tasks (title, status, priority, labels, assignees, due_date, description, checklist, attachments) VALUES 
+      ('Implement new user interface customization', 'Backlog', 'Medium', '["Frontend", "Review Needed"]', '["A", "B"]', '2026-03-31', 'Detailed description for UI customization...', '[]', '[]'),
+      ('Add support for advanced networking features', 'Backlog', 'Urgent', '["Marketing", "Design"]', '["C"]', '2026-02-15', 'Networking features description...', '[]', '[]'),
+      ('Implement new developer platform features', 'Backlog', 'High', '["Backend"]', '["D", "E"]', '2026-04-04', 'Platform features description...', '[]', '[]'),
+      ('Add support for advanced security scanning', 'To Do', 'High', '["Security"]', '["A", "C"]', '2026-02-06', 'Nice implementation! I learned something new from your approach. Illo eum pariatur quia et.', '[{"id": 1, "text": "Setup environment", "completed": true}, {"id": 2, "text": "Run initial scan", "completed": false}]', '[{"id": 1, "name": "sachin-khadka-vRbwavtdX1o-unsplash.jpg", "url": "https://picsum.photos/seed/security/800/600", "type": "image/jpeg", "created_at": "2026-03-04"}, {"id": 2, "name": "julie-blake-edison-shf2FbcCyul-unsplash.jpg", "url": "https://picsum.photos/seed/security2/800/600", "type": "image/jpeg", "created_at": "2026-03-15"}]'),
+      ('Create automated system recovery features', 'To Do', 'Medium', '["DevOps"]', '["B"]', '2026-03-30', 'Recovery features description...', '[]', '[]'),
+      ('Implement new user interface enhancements', 'In Progress', 'Medium', '["Frontend"]', '["A"]', '2026-03-29', 'Enhancements description...', '[]', '[]'),
+      ('Add support for advanced graphics capabilities', 'In Progress', 'High', '["Design"]', '["D", "E"]', '2026-03-29', 'Graphics capabilities description...', '[]', '[]'),
+      ('Create automated system optimization', 'Review', 'High', '["Backend", "Bug"]', '["B"]', '2026-02-27', 'Optimization description...', '[]', '[]'),
+      ('Implement new developer tools integration', 'Review', 'Medium', '["Tools"]', '["C"]', '2026-03-24', 'Tools integration description...', '[]', '[]'),
+      ('Create automated system updates', 'Testing', 'Medium', '["DevOps"]', '["A", "D"]', '2026-04-01', 'Updates description...', '[]', '[]'),
+      ('Add support for advanced cloud services', 'Testing', 'Urgent', '["Cloud", "Marketing"]', '["B", "E", "C"]', '2026-03-28', 'Cloud services description...', '[]', '[]'),
+      ('Add support for advanced hardware features', 'Done', 'High', '["Hardware"]', '["A"]', '2026-03-29', 'Hardware features description...', '[]', '[]'),
+      ('Create automated system maintenance', 'Done', 'Medium', '["DevOps"]', '["B", "C"]', '2026-03-28', 'Maintenance description...', '[]', '[]')
+    `);
+
+    // Seed activities for the security scanning task
+    const [rows] = await connection.query('SELECT id FROM tasks WHERE title = "Add support for advanced security scanning"');
+    const taskId = (rows as { id: number }[])[0].id;
+    await connection.query(`
+      INSERT INTO task_activities (task_id, user_name, user_avatar, content, created_at) VALUES 
+      (${taskId}, 'Dora Quincy', 'https://i.pravatar.cc/150?u=dora', 'Nice implementation! I learned something new from your approach. Illo eum pariatur quia et.', '2026-01-14 14:11:00'),
+      (${taskId}, 'Joelle Celine', 'https://i.pravatar.cc/150?u=joelle', 'External service is down. Will retry tomorrow.', '2026-01-05 01:44:00'),
+      (${taskId}, 'Murray Marvin', 'https://i.pravatar.cc/150?u=murray', 'Added the requested changes. Let me know if you need anything else.', '2026-03-14 09:23:00'),
+      (${taskId}, 'Jolie Susana', 'https://i.pravatar.cc/150?u=jolie', 'Blocked by the API integration task. Waiting for completion. Est deleniti asperiores dicta ad et dolor sunt qui.', '2026-02-05 19:29:00'),
+      (${taskId}, 'Paul Octavia', 'https://i.pravatar.cc/150?u=paul', 'Task completed successfully. Ready for deployment.', '2026-01-10 11:20:00')
+    `);
+  }
 }
