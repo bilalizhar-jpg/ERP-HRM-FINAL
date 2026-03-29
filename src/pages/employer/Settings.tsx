@@ -30,9 +30,28 @@ export default function Settings() {
     timeFormat: '24h' // '12h' or '24h'
   });
 
+  const [error, setError] = useState<string | null>(null);
+  const [isServerUp, setIsServerUp] = useState<boolean | null>(null);
+
   const fetchSettings = async () => {
     try {
       console.log('Fetching all settings from database...');
+      setError(null);
+      
+      // First, check if server is reachable
+      try {
+        const pingRes = await fetch('/api/ping');
+        if (pingRes.ok) {
+          setIsServerUp(true);
+        } else {
+          setIsServerUp(false);
+        }
+      } catch (e) {
+        console.error('Ping failed:', e);
+        setIsServerUp(false);
+        throw new Error('Server is unreachable. Please check if the backend is running.');
+      }
+
       const [profileRes, rulesRes, shiftsRes] = await Promise.all([
         fetch('/api/employer/settings/profile'),
         fetch('/api/employer/settings/rules'),
@@ -43,6 +62,9 @@ export default function Settings() {
         const profileData = await profileRes.json();
         console.log('Profile data loaded:', profileData);
         setCompanyProfile(profileData);
+      } else {
+        const err = await profileRes.json();
+        console.warn('Profile fetch failed:', err);
       }
 
       if (rulesRes.ok) {
@@ -58,6 +80,7 @@ export default function Settings() {
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
+      setError(error instanceof Error ? error.message : 'Failed to fetch settings');
     }
   };
 
@@ -840,6 +863,15 @@ export default function Settings() {
             <header className="mb-12">
               <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">Settings</h1>
               <p className="text-slate-500 font-medium">Configure global application settings and business rules.</p>
+              
+              {error && (
+                <div className="mt-4 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-bold uppercase tracking-wider">
+                  ⚠️ {error}
+                  {isServerUp === false && (
+                    <p className="mt-1 text-[10px] opacity-70">The backend server appears to be offline or unreachable.</p>
+                  )}
+                </div>
+              )}
             </header>
           )}
 

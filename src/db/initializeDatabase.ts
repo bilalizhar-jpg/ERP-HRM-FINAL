@@ -57,9 +57,25 @@ export async function initializeDatabase(connection: Connection) {
       gmail_tokens TEXT,
       smtp_settings TEXT,
       business_rules TEXT,
+      website VARCHAR(255),
+      about TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Add missing columns if table already exists
+  try {
+    const [columns] = await connection.query('SHOW COLUMNS FROM companies') as [Record<string, unknown>[], unknown];
+    const columnNames = columns.map(c => c.Field as string);
+    if (!columnNames.includes('website')) {
+      await connection.query('ALTER TABLE companies ADD COLUMN website VARCHAR(255)');
+    }
+    if (!columnNames.includes('about')) {
+      await connection.query('ALTER TABLE companies ADD COLUMN about TEXT');
+    }
+  } catch (err) {
+    console.error('Error adding missing columns to companies table:', err);
+  }
 
   // Create shifts table
   await connection.query(`
@@ -86,6 +102,23 @@ export async function initializeDatabase(connection: Connection) {
       ('Morning', '09:00:00', '17:00:00', 60, 15, 8, '15', 'Active'),
       ('Evening', '14:00:00', '22:00:00', 60, 15, 8, '15', 'Active'),
       ('Night', '22:00:00', '06:00:00', 60, 15, 8, '15', 'Active')
+    `);
+  }
+
+  // Insert default company if not exists
+  const [existingCompanies] = await connection.query('SELECT COUNT(*) as count FROM companies') as [Record<string, unknown>[], unknown];
+  if ((existingCompanies[0] as { count: number }).count === 0) {
+    await connection.query(`
+      INSERT INTO companies (
+        name, email, mobile, unique_code, subsidiary, 
+        head_office_location, factory_location, 
+        admin_username, admin_password, logo_url, plan, status, license_status, business_rules
+      ) VALUES (
+        'Acme Corp', 'support@acmecorp.com', '+1 234 567 890', 'ACME-001', 'None',
+        '123 Main St, New York, NY', '456 Industrial Way, Newark, NJ',
+        'acme_admin', 'admin123', 'https://picsum.photos/seed/acme/200/200', 'Premium', 'active', 'valid',
+        '{"language":"English","currency":"USD","timeZone":"UTC","timeFormat":"24h","taxRate":0,"vatRate":0,"customField":""}'
+      )
     `);
   }
 

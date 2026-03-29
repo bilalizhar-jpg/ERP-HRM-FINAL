@@ -3,8 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import nodemailer from "nodemailer";
 import { google } from "googleapis";
-import { Connection } from "mysql2/promise";
-import db from "./src/db";
+import db from "./src/db.ts";
 import { initializeDatabase } from "./src/db/initializeDatabase";
 import cron from "node-cron";
 import makeWASocket, { 
@@ -47,6 +46,14 @@ const __filename = typeof import.meta !== 'undefined' ? fileURLToPath(import.met
 const __dirname = typeof import.meta !== 'undefined' ? path.dirname(__filename) : (globalThis as Record<string, unknown>).__dirname as string;
 
 async function startServer() {
+  process.on('uncaughtException', (err) => {
+    console.error('CRITICAL: Uncaught Exception:', err);
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('CRITICAL: Unhandled Rejection at:', promise, 'reason:', reason);
+  });
+
   const app = express();
   const PORT = process.env.PORT || 3000;
 
@@ -62,12 +69,16 @@ async function startServer() {
   app.use(express.json());
 
   app.use("/api", (req, res, next) => {
-    console.log("API request:", req.method, req.url);
+    console.log(`[${new Date().toISOString()}] API request: ${req.method} ${req.url}`);
     next();
   });
 
   app.use("/api", dbHealthRouter);
   app.use("/api/notices", noticesRouter);
+
+  app.get("/api/ping", (req, res) => {
+    res.json({ status: "ok", time: new Date().toISOString() });
+  });
 
   app.post("/api/init-db", async (req, res) => {
     try {
