@@ -785,4 +785,98 @@ export async function initializeDatabase(connection: Connection) {
       );
     }
   }
+
+  // Create chats table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS chats (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      type ENUM('one-to-one', 'group', 'channel') NOT NULL,
+      name VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Create chat_participants table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS chat_participants (
+      chat_id INT NOT NULL,
+      user_id INT NOT NULL,
+      joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (chat_id, user_id),
+      FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES employees(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Create messages table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      chat_id INT NOT NULL,
+      sender_id INT NOT NULL,
+      parent_id INT DEFAULT NULL,
+      content TEXT,
+      type ENUM('text', 'image', 'file') DEFAULT 'text',
+      is_edited BOOLEAN DEFAULT 0,
+      is_deleted BOOLEAN DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+      FOREIGN KEY (sender_id) REFERENCES employees(id) ON DELETE CASCADE,
+      FOREIGN KEY (parent_id) REFERENCES messages(id) ON DELETE SET NULL
+    )
+  `);
+
+  // Create message_reactions table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS message_reactions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      message_id INT NOT NULL,
+      user_id INT NOT NULL,
+      emoji VARCHAR(10) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES employees(id) ON DELETE CASCADE,
+      UNIQUE KEY (message_id, user_id, emoji)
+    )
+  `);
+
+  // Create message_reads table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS message_reads (
+      message_id INT NOT NULL,
+      user_id INT NOT NULL,
+      read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (message_id, user_id),
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES employees(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Create guest_invites table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS guest_invites (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      email VARCHAR(255) NOT NULL,
+      chat_id INT NOT NULL,
+      token VARCHAR(255) NOT NULL,
+      invited_by INT,
+      used BOOLEAN DEFAULT 0,
+      expires_at TIMESTAMP NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+      FOREIGN KEY (invited_by) REFERENCES employees(id) ON DELETE SET NULL
+    )
+  `);
+
+  // Create ai_history table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS ai_history (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      module VARCHAR(100) NOT NULL,
+      prompt TEXT NOT NULL,
+      response TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 }

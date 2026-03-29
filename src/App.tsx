@@ -92,7 +92,10 @@ import EmployeeLeaves from './pages/EmployeeLeaves';
 import EmployeePayroll from './pages/EmployeePayroll';
 import EmployeeLogin from './pages/EmployeeLogin';
 import EmployeeDashboard from './pages/EmployeeDashboard';
+import EmployeeAssetPage from './pages/employee/EmployeeAssetPage';
 import EmployeeItemRequest from './pages/EmployeeItemRequest';
+import GuestJoin from './pages/GuestJoin';
+import GlobalAIAssistant from './components/GlobalAIAssistant';
 
 function Home() {
   return (
@@ -118,7 +121,9 @@ function Home() {
 function App() {
   return (
     <Router>
-      <Routes>
+      <div className="relative">
+        <GlobalAIAssistant />
+        <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/contact-us" element={<ContactUs />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
@@ -256,17 +261,19 @@ function App() {
           {/* Add more routes here as needed */}
         </Route>
         <Route path="/employee/login" element={<EmployeeLogin />} />
+        <Route path="/guest/join/:token" element={<GuestJoin />} />
         <Route path="/employee" element={<EmployeeLayout />}>
           <Route path="dashboard" element={<EmployeeDashboard />} />
           <Route path="attendance" element={<EmployeeAttendance />} />
           <Route path="notice-board" element={<NoticeBoard isAdmin={false} />} />
           <Route path="leaves" element={<EmployeeLeaves />} />
           <Route path="payroll" element={<EmployeePayroll />} />
-          <Route path="assets" element={<Assets />} />
+          <Route path="assets" element={<EmployeeAssetPage />} />
           <Route path="assets/request" element={<EmployeeItemRequest />} />
           <Route path="message" element={<Message />} />
         </Route>
       </Routes>
+      </div>
     </Router>
   )
 }

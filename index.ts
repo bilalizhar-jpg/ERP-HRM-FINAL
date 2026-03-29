@@ -16,8 +16,12 @@ import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
 import fs from "fs";
 import { join } from "path";
+import { createServer } from "http";
+import { Server } from "socket.io";
 import dbHealthRouter from "./src/routes/dbHealth";
 import noticesRouter from "./src/routes/notices";
+import messagesRouter from "./src/routes/messages";
+import aiRouter from "./src/routes/ai";
 
 interface AttendanceRecord {
   id: number;
@@ -83,6 +87,9 @@ async function startServer() {
 
   app.use("/api", dbHealthRouter);
   app.use("/api/notices", noticesRouter);
+  app.use("/api/messages", messagesRouter);
+  app.use("/api/ai", aiRouter);
+app.use("/uploads", express.static(join(process.cwd(), "uploads")));
 
   app.get("/api/ping", (req, res) => {
     res.json({ status: "ok", time: new Date().toISOString() });
@@ -3395,7 +3402,33 @@ async function startServer() {
     }
   });
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const httpServer = createServer(app);
+  const io = new Server(httpServer);
+
+  io.on('connection', (socket) => {
+    console.log('A user connected:', socket.id);
+    socket.on('disconnect', () => {
+      console.log('User disconnected:', socket.id);
+    });
+    socket.on('join_chat', (chatId) => {
+      socket.join(chatId);
+    });
+    socket.on('send_message', (message) => {
+      io.to(message.chat_id).emit('receive_message', message);
+      // Notify other participants
+      socket.broadcast.emit('new_notification', {
+        type: 'message',
+        chat_id: message.chat_id,
+        sender_name: message.sender_name,
+        content: message.content
+      });
+    });
+    socket.on('typing', (data) => {
+      socket.to(data.chat_id).emit('user_typing', data);
+    });
+  });
+
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
     
     // Test database connection in the background

@@ -1,25 +1,27 @@
 import { useLocation } from 'react-router-dom';
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
-import ModulePlaceholder from '../../components/ModulePlaceholder';
+import EmployeeSidebar from '../../components/EmployeeSidebar';
+import ChatSystem from '../../components/messaging/ChatSystem';
 
 export default function Message() {
   const location = useLocation();
   const isSuperAdminPath = location.pathname.startsWith('/super-admin');
+  const isEmployeePath = location.pathname.startsWith('/employee');
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex">
+    <div className="h-screen bg-[#f8f9fa] flex overflow-hidden">
       {isSuperAdminPath && <SuperAdminSidebar />}
+      {isEmployeePath && <EmployeeSidebar />}
       
-      <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
-        <header className="mb-12">
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">Messages</h1>
-          <p className="text-slate-500 font-medium">Internal communication and messaging.</p>
+      <main className="flex-1 flex flex-col overflow-hidden p-6 lg:p-8">
+        <header className="mb-6 shrink-0">
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase mb-1">Communication Hub</h1>
+          <p className="text-slate-500 font-bold text-sm uppercase tracking-widest">Real-time collaboration and messaging.</p>
         </header>
 
-        <ModulePlaceholder 
-          title="Messages" 
-          description="Messaging module is under development." 
-        />
+        <div className="flex-1 min-h-0">
+          <ChatSystem />
+        </div>
       </main>
     </div>
   );
