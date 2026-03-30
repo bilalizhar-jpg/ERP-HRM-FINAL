@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Plus, Calendar, User, Briefcase, Building2, Clock, FileText, MoreHorizontal, MessageSquare, Paperclip, Filter, Layout, List as ListIcon, Calendar as CalendarIcon, X, CheckSquare, Eye, Download, Trash2, Edit2, Archive, ChevronDown, Send } from 'lucide-react';
+import { Plus, Calendar, User, Briefcase, Building2, Clock, FileText, MoreHorizontal, MessageSquare, Paperclip, Filter, Layout, List as ListIcon, Calendar as CalendarIcon, X, CheckSquare, Eye, Download, Trash2, Edit2, Archive, ChevronDown, Send, Flag, ExternalLink, Check, Users } from 'lucide-react';
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DndContext, closestCorners, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay, defaultDropAnimationSideEffects, DragStartEvent, DragEndEvent } from '@dnd-kit/core';
@@ -8,18 +8,28 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import { CSS } from '@dnd-kit/utilities';
 
 import { fetchWithRetry } from '../../utils/fetchWithRetry';
+import { Project, Milestone } from '../../types';
 
-interface Project {
-  id?: number;
-  company_name: string;
-  project_name: string;
-  contact_person: string;
-  project_type: string;
-  duration: string;
-  assigned_to: string;
-  start_date: string;
-  end_date: string;
-  timeline_milestones: string;
+interface Bid {
+  id: number;
+  date: string;
+  bidder_id: number;
+  bidder_name?: string;
+  source: string;
+  job_title: string;
+  job_link: string;
+  profile: string;
+  bid_type: string;
+  bid_rate: string;
+  connects: number;
+  boosted: number;
+  is_viewed: boolean;
+  is_interviewed: boolean;
+  is_hired: boolean;
+  hiring_rate: string;
+  location: string;
+  client_spend: string;
+  company_id: number;
 }
 
 interface TaskActivity {
@@ -172,13 +182,23 @@ export default function ProjectManagement() {
   const isProjectsList = location.pathname.endsWith('/list');
   const isWorkspaceTasks = location.pathname.endsWith('/workspace-tasks');
   
-  const [view, setView] = useState<'list' | 'add'>('list');
+  const [view, setView] = useState<'list' | 'add' | 'milestones' | 'bidders'>(
+    location.pathname.endsWith('/milestones') ? 'milestones' : 
+    location.pathname.endsWith('/bidder-details') ? 'bidders' : 'list'
+  );
   const [projects, setProjects] = useState<Project[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [bidders, setBidders] = useState<Bid[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState(false);
+  const [isBidModalOpen, setIsBidModalOpen] = useState(false);
+  const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
+  const [editingBid, setEditingBid] = useState<Bid | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState<number | null>(null);
   const [taskActivities, setTaskActivities] = useState<TaskActivity[]>([]);
   const [newComment, setNewComment] = useState('');
   
@@ -188,6 +208,37 @@ export default function ProjectManagement() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [tempDescription, setTempDescription] = useState('');
+
+  const [milestoneFormData, setMilestoneFormData] = useState<Partial<Milestone>>({
+    name: '',
+    project_id: undefined,
+    assignee_id: undefined,
+    priority: 'Medium',
+    start_date: '',
+    end_date: '',
+    notes: '',
+    status: 'Active',
+    completion_percentage: 0
+  });
+
+  const [bidFormData, setBidFormData] = useState<Partial<Bid>>({
+    date: new Date().toISOString().split('T')[0],
+    bidder_id: undefined,
+    source: '',
+    job_title: '',
+    job_link: '',
+    profile: 'Agency',
+    bid_type: 'Hourly',
+    bid_rate: '',
+    connects: 0,
+    boosted: 0,
+    is_viewed: false,
+    is_interviewed: false,
+    is_hired: false,
+    hiring_rate: '',
+    location: '',
+    client_spend: ''
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -200,7 +251,7 @@ export default function ProjectManagement() {
     })
   );
 
-  const [formData, setFormData] = useState<Project>({
+  const [formData, setFormData] = useState<Partial<Project>>({
     company_name: '',
     project_name: '',
     contact_person: '',
@@ -209,7 +260,9 @@ export default function ProjectManagement() {
     assigned_to: '',
     start_date: '',
     end_date: '',
-    timeline_milestones: ''
+    timeline_milestones: '',
+    status: 'Active',
+    company_id: 1
   });
 
   useEffect(() => {
@@ -219,7 +272,156 @@ export default function ProjectManagement() {
     if (isWorkspaceTasks) {
       fetchTasks();
     }
-  }, [isProjectsList, isWorkspaceTasks]);
+    if (location.pathname.endsWith('/milestones')) {
+      setView('milestones');
+      fetchMilestones();
+      fetchProjects();
+      fetchEmployees();
+    }
+    if (location.pathname.endsWith('/bidder-details')) {
+      setView('bidders');
+      fetchBidders();
+      fetchEmployees();
+    }
+  }, [isProjectsList, isWorkspaceTasks, location.pathname]);
+
+  const fetchBidders = async () => {
+    setLoading(true);
+    try {
+      const res = await fetchWithRetry('/api/bids?company_id=1');
+      if (res.ok) {
+        setBidders(await res.json());
+      }
+    } catch (error) {
+      console.error("Error fetching bids:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveBid = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const url = editingBid ? `/api/bids/${editingBid.id}` : '/api/bids';
+      const method = editingBid ? 'PUT' : 'POST';
+      const res = await fetchWithRetry(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...bidFormData, company_id: 1 })
+      });
+      if (res.ok) {
+        setIsBidModalOpen(false);
+        setEditingBid(null);
+        setBidFormData({
+          date: new Date().toISOString().split('T')[0],
+          bidder_id: undefined,
+          source: '',
+          job_title: '',
+          job_link: '',
+          profile: 'Agency',
+          bid_type: 'Hourly',
+          bid_rate: '',
+          connects: 0,
+          boosted: 0,
+          is_viewed: false,
+          is_interviewed: false,
+          is_hired: false,
+          hiring_rate: '',
+          location: '',
+          client_spend: ''
+        });
+        fetchBidders();
+      }
+    } catch (error) {
+      console.error("Error saving bid:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteBid = async (id: number) => {
+    try {
+      const res = await fetchWithRetry(`/api/bids/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setIsDeleteConfirmOpen(null);
+        fetchBidders();
+      }
+    } catch (error) {
+      console.error("Error deleting bid:", error);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetchWithRetry('/api/employees?company_id=1');
+      if (res.ok) {
+        setEmployees(await res.json());
+      }
+    } catch (error) {
+      console.error("Error fetching employees:", error);
+    }
+  };
+
+  const fetchMilestones = async () => {
+    setLoading(true);
+    try {
+      const res = await fetchWithRetry('/api/milestones?company_id=1');
+      if (res.ok) {
+        setMilestones(await res.json());
+      }
+    } catch (error) {
+      console.error("Error fetching milestones:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveMilestone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const url = editingMilestone ? `/api/milestones/${editingMilestone.id}` : '/api/milestones';
+      const method = editingMilestone ? 'PUT' : 'POST';
+      const res = await fetchWithRetry(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...milestoneFormData, company_id: 1 })
+      });
+      if (res.ok) {
+        setIsMilestoneModalOpen(false);
+        setEditingMilestone(null);
+        setMilestoneFormData({
+          name: '',
+          project_id: undefined,
+          assignee_id: undefined,
+          priority: 'Medium',
+          start_date: '',
+          end_date: '',
+          notes: '',
+          status: 'Active',
+          completion_percentage: 0
+        });
+        fetchMilestones();
+      }
+    } catch (error) {
+      console.error("Error saving milestone:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteMilestone = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this milestone?')) return;
+    try {
+      const res = await fetchWithRetry(`/api/milestones/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchMilestones();
+      }
+    } catch (error) {
+      console.error("Error deleting milestone:", error);
+    }
+  };
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -411,7 +613,9 @@ export default function ProjectManagement() {
           assigned_to: '',
           start_date: '',
           end_date: '',
-          timeline_milestones: ''
+          timeline_milestones: '',
+          status: 'Active',
+          company_id: 1
         });
       }
     } catch (error) {
@@ -973,11 +1177,377 @@ export default function ProjectManagement() {
             )}
           </AnimatePresence>
         </main>
+
+        {/* Bid Modal */}
+      <AnimatePresence>
+        {isBidModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden"
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{editingBid ? 'Edit Bid' : 'Add New Bid'}</h2>
+                  <p className="text-slate-500 text-sm font-medium">Enter project bidding details below.</p>
+                </div>
+                <button 
+                  onClick={() => setIsBidModalOpen(false)}
+                  className="p-2 hover:bg-white rounded-xl transition-colors text-slate-400 hover:text-slate-600 shadow-sm"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveBid} className="p-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Bidder (Employee)</label>
+                    <select 
+                      required
+                      value={bidFormData.bidder_id || ''}
+                      onChange={(e) => setBidFormData({ ...bidFormData, bidder_id: Number(e.target.value) })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    >
+                      <option value="">Select Bidder</option>
+                      {employees.map(e => (
+                        <option key={e.id} value={e.id}>{e.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date</label>
+                    <input 
+                      type="date" 
+                      required
+                      value={bidFormData.date}
+                      onChange={(e) => setBidFormData({ ...bidFormData, date: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Source</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Upwork, LinkedIn"
+                      value={bidFormData.source}
+                      onChange={(e) => setBidFormData({ ...bidFormData, source: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Job Title</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="Enter job title"
+                      value={bidFormData.job_title}
+                      onChange={(e) => setBidFormData({ ...bidFormData, job_title: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Job Link</label>
+                    <input 
+                      type="url" 
+                      required
+                      placeholder="https://..."
+                      value={bidFormData.job_link}
+                      onChange={(e) => setBidFormData({ ...bidFormData, job_link: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Profile</label>
+                    <select 
+                      value={bidFormData.profile}
+                      onChange={(e) => setBidFormData({ ...bidFormData, profile: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    >
+                      <option value="Agency">Agency</option>
+                      <option value="Individual">Individual</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Bid Type</label>
+                    <select 
+                      value={bidFormData.bid_type}
+                      onChange={(e) => setBidFormData({ ...bidFormData, bid_type: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    >
+                      <option value="Hourly">Hourly</option>
+                      <option value="Fixed Price">Fixed Price</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Bid Rate ($)</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. $45.00 - $65.00"
+                      value={bidFormData.bid_rate}
+                      onChange={(e) => setBidFormData({ ...bidFormData, bid_rate: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Connects</label>
+                    <input 
+                      type="number" 
+                      value={bidFormData.connects}
+                      onChange={(e) => setBidFormData({ ...bidFormData, connects: Number(e.target.value) })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Boosted</label>
+                    <input 
+                      type="number" 
+                      value={bidFormData.boosted}
+                      onChange={(e) => setBidFormData({ ...bidFormData, boosted: Number(e.target.value) })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hiring Rate</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 53%"
+                      value={bidFormData.hiring_rate}
+                      onChange={(e) => setBidFormData({ ...bidFormData, hiring_rate: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Location</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Ukraine, US"
+                      value={bidFormData.location}
+                      onChange={(e) => setBidFormData({ ...bidFormData, location: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Client Spend</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. $132K"
+                      value={bidFormData.client_spend}
+                      onChange={(e) => setBidFormData({ ...bidFormData, client_spend: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-8 mb-8 p-4 bg-slate-50 rounded-2xl">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input 
+                      type="checkbox" 
+                      checked={bidFormData.is_viewed}
+                      onChange={(e) => setBidFormData({ ...bidFormData, is_viewed: e.target.checked })}
+                      className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20"
+                    />
+                    <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 transition-colors">Is Viewed</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input 
+                      type="checkbox" 
+                      checked={bidFormData.is_interviewed}
+                      onChange={(e) => setBidFormData({ ...bidFormData, is_interviewed: e.target.checked })}
+                      className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20"
+                    />
+                    <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 transition-colors">Is Interviewed</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input 
+                      type="checkbox" 
+                      checked={bidFormData.is_hired}
+                      onChange={(e) => setBidFormData({ ...bidFormData, is_hired: e.target.checked })}
+                      className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20"
+                    />
+                    <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 transition-colors">Is Hired</span>
+                  </label>
+                </div>
+
+                <div className="flex justify-end gap-4">
+                  <button 
+                    type="button"
+                    onClick={() => setIsBidModalOpen(false)}
+                    className="px-8 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={loading}
+                    className="px-10 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 disabled:transform-none"
+                  >
+                    {loading ? 'Saving...' : editingBid ? 'Update Bid' : 'Save Bid'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Milestone Modal */}
+        <AnimatePresence>
+          {isMilestoneModalOpen && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsMilestoneModalOpen(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden"
+              >
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-slate-800">
+                    {editingMilestone ? 'Edit Milestone' : 'Add New Milestone'}
+                  </h2>
+                  <button 
+                    onClick={() => setIsMilestoneModalOpen(false)}
+                    className="p-2 hover:bg-slate-50 text-slate-400 rounded-lg transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveMilestone} className="p-6 space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Project Name <span className="text-red-500">*</span></label>
+                    <select
+                      required
+                      value={milestoneFormData.project_id || ''}
+                      onChange={(e) => setMilestoneFormData({...milestoneFormData, project_id: Number(e.target.value)})}
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium text-slate-700 outline-none"
+                    >
+                      <option value="">Select</option>
+                      {projects.map(p => (
+                        <option key={p.id} value={p.id}>{p.project_name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Milestone Name <span className="text-red-500">*</span></label>
+                    <input
+                      required
+                      type="text"
+                      value={milestoneFormData.name}
+                      onChange={(e) => setMilestoneFormData({...milestoneFormData, name: e.target.value})}
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium text-slate-700 outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Assignee <span className="text-red-500">*</span></label>
+                    <select
+                      required
+                      value={milestoneFormData.assignee_id || ''}
+                      onChange={(e) => setMilestoneFormData({...milestoneFormData, assignee_id: Number(e.target.value)})}
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium text-slate-700 outline-none"
+                    >
+                      <option value="">Select</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Priority <span className="text-red-500">*</span></label>
+                    <select
+                      value={milestoneFormData.priority}
+                      onChange={(e) => setMilestoneFormData({...milestoneFormData, priority: e.target.value as Milestone['priority']})}
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium text-slate-700 outline-none"
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-700">Start Date <span className="text-red-500">*</span></label>
+                      <input
+                        required
+                        type="date"
+                        value={milestoneFormData.start_date}
+                        onChange={(e) => setMilestoneFormData({...milestoneFormData, start_date: e.target.value})}
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium text-slate-700 outline-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-700">End Date <span className="text-red-500">*</span></label>
+                      <input
+                        required
+                        type="date"
+                        value={milestoneFormData.end_date}
+                        onChange={(e) => setMilestoneFormData({...milestoneFormData, end_date: e.target.value})}
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium text-slate-700 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Notes</label>
+                    <textarea
+                      value={milestoneFormData.notes}
+                      onChange={(e) => setMilestoneFormData({...milestoneFormData, notes: e.target.value})}
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium text-slate-700 min-h-[120px] outline-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setIsMilestoneModalOpen(false)}
+                      className="px-6 py-2.5 bg-slate-50 text-slate-600 rounded-lg font-bold hover:bg-slate-100 transition-all border border-slate-100"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="px-6 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-all disabled:opacity-50"
+                    >
+                      {loading ? 'Saving...' : editingMilestone ? 'UPDATE MILESTONE' : 'ADD MILESTONE'}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
 
-  if (!isProjectsList) {
+  if (!isProjectsList && view !== 'milestones' && view !== 'bidders' && !isWorkspaceTasks) {
     return (
       <div className="min-h-screen bg-[#f8f9fa] flex">
         {isSuperAdminPath && <SuperAdminSidebar />}
@@ -1005,8 +1575,14 @@ export default function ProjectManagement() {
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
           <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">Project Portfolio</h1>
-            <p className="text-slate-500 font-medium">Manage and track all company projects in one place.</p>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase mb-2">
+              {view === 'milestones' ? 'Project Milestones' : 
+               view === 'bidders' ? 'Bidder Details' : 'Project Portfolio'}
+            </h1>
+            <p className="text-slate-500 font-medium">
+              {view === 'milestones' ? 'Track and manage key project deliverables.' : 
+               view === 'bidders' ? 'Manage project bidders and proposals.' : 'Manage and track all company projects in one place.'}
+            </p>
           </div>
           {view === 'list' && (
             <button 
@@ -1017,10 +1593,387 @@ export default function ProjectManagement() {
               NEW PROJECT
             </button>
           )}
+          {view === 'milestones' && (
+            <button 
+              onClick={() => {
+                setEditingMilestone(null);
+                setMilestoneFormData({
+                  name: '',
+                  project_id: undefined,
+                  assignee_id: undefined,
+                  priority: 'Medium',
+                  start_date: '',
+                  end_date: '',
+                  notes: '',
+                  status: 'Active',
+                  completion_percentage: 0
+                });
+                setIsMilestoneModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-200 hover:bg-red-700 transition-all transform hover:-translate-y-1 active:scale-95 uppercase tracking-wider"
+            >
+              <Plus size={20} />
+              ADD MILESTONE
+            </button>
+          )}
+          {view === 'bidders' && (
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Search bids..." 
+                  className="pl-12 pr-6 py-3 bg-white border border-slate-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-64 shadow-sm"
+                />
+              </div>
+              <button 
+                onClick={() => {
+                  setEditingBid(null);
+                  setBidFormData({
+                    date: new Date().toISOString().split('T')[0],
+                    bidder_id: undefined,
+                    source: '',
+                    job_title: '',
+                    job_link: '',
+                    profile: 'Agency',
+                    bid_type: 'Hourly',
+                    bid_rate: '',
+                    connects: 0,
+                    boosted: 0,
+                    is_viewed: false,
+                    is_interviewed: false,
+                    is_hired: false,
+                    hiring_rate: '',
+                    location: '',
+                    client_spend: ''
+                  });
+                  setIsBidModalOpen(true);
+                }}
+                className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all transform hover:-translate-y-1 active:scale-95 uppercase tracking-wider"
+              >
+                <Plus size={20} />
+                Add Bid
+              </button>
+            </div>
+          )}
         </header>
 
         <AnimatePresence mode="wait">
-          {view === 'list' ? (
+          {view === 'milestones' ? (
+            <motion.div
+              key="milestones"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-6"
+            >
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-slate-100">
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Milestone Name</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Project</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Assignee</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Priority</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Timeline</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Progress</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {milestones.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-6 py-20 text-center">
+                            <div className="flex flex-col items-center gap-4">
+                              <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300">
+                                <Flag size={32} />
+                              </div>
+                              <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-4">No milestones found</p>
+                              <button 
+                                onClick={() => {
+                                  setEditingMilestone(null);
+                                  setMilestoneFormData({
+                                    name: '',
+                                    project_id: undefined,
+                                    assignee_id: undefined,
+                                    priority: 'Medium',
+                                    start_date: '',
+                                    end_date: '',
+                                    notes: '',
+                                    status: 'Active',
+                                    completion_percentage: 0
+                                  });
+                                  setIsMilestoneModalOpen(true);
+                                }}
+                                className="px-6 py-2.5 bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-200 hover:bg-red-700 transition-all uppercase tracking-wider text-xs"
+                              >
+                                Create First Milestone
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        milestones.map((milestone) => (
+                          <tr key={milestone.id} className="hover:bg-slate-50/50 transition-colors group">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+                                  <Flag size={14} />
+                                </div>
+                                <span className="text-sm font-bold text-slate-800">{milestone.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{milestone.project_name}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-slate-100 overflow-hidden">
+                                  <img src={`https://i.pravatar.cc/150?u=${milestone.assignee_id}`} alt="" className="w-full h-full object-cover" />
+                                </div>
+                                <span className="text-xs font-bold text-slate-700">{milestone.assignee_name}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                                milestone.priority === 'High' ? 'bg-red-50 text-red-600' :
+                                milestone.priority === 'Medium' ? 'bg-orange-50 text-orange-600' :
+                                'bg-blue-50 text-blue-600'
+                              }`}>
+                                {milestone.priority}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Start: {milestone.start_date}</span>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">End: {milestone.end_date}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="w-24">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[10px] font-black text-slate-400">{milestone.completion_percentage}%</span>
+                                </div>
+                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-blue-600 rounded-full" 
+                                    style={{ width: `${milestone.completion_percentage}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                                milestone.status === 'Completed' ? 'bg-green-50 text-green-600' :
+                                milestone.status === 'Active' ? 'bg-blue-50 text-blue-600' :
+                                'bg-slate-50 text-slate-400'
+                              }`}>
+                                {milestone.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button 
+                                  onClick={() => {
+                                    setEditingMilestone(milestone);
+                                    setMilestoneFormData({
+                                      name: milestone.name,
+                                      project_id: milestone.project_id,
+                                      assignee_id: milestone.assignee_id,
+                                      priority: milestone.priority,
+                                      start_date: milestone.start_date,
+                                      end_date: milestone.end_date,
+                                      notes: milestone.notes,
+                                      status: milestone.status,
+                                      completion_percentage: milestone.completion_percentage
+                                    });
+                                    setIsMilestoneModalOpen(true);
+                                  }}
+                                  className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => milestone.id && handleDeleteMilestone(milestone.id)}
+                                  className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
+          ) : view === 'bidders' ? (
+            <motion.div
+              key="bidders"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-6"
+            >
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[1800px]">
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-slate-100">
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Bidder (Employee)</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Source</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Job Title</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Job Link</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Profile</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Bid Type</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Bid Rate ($)</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Connects</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Boosted</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Viewed</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Inter</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Hired</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Hiring Rate</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Location</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Client Spend</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bidders.length > 0 ? bidders.map((b) => (
+                        <tr key={b.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group">
+                          <td className="px-6 py-5 whitespace-nowrap">
+                            <span className="text-sm text-slate-600">{new Date(b.date).toLocaleDateString()}</span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="flex items-center gap-3">
+                              <img src={`https://i.pravatar.cc/150?u=${b.bidder_id}`} alt="" className="w-8 h-8 rounded-full border-2 border-white shadow-sm" />
+                              <span className="font-bold text-slate-900">{employees.find(e => e.id === b.bidder_id)?.name || 'Unknown'}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="text-sm text-slate-600">{b.source}</span>
+                          </td>
+                          <td className="px-6 py-5 max-w-[200px] truncate">
+                            <span className="text-sm text-slate-600 font-medium">{b.job_title}</span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <a href={b.job_link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1">
+                              Link <ExternalLink size={12} />
+                            </a>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="text-sm text-slate-600">{b.profile}</span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="text-sm text-slate-600">{b.bid_type}</span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="text-sm font-bold text-slate-900">{b.bid_rate}</span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="text-sm text-slate-600">{b.connects}</span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="text-sm text-slate-600">{b.boosted}</span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className={`w-5 h-5 rounded-md flex items-center justify-center ${b.is_viewed ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-300'}`}>
+                              {b.is_viewed && <Check size={12} strokeWidth={4} />}
+                            </div>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className={`w-5 h-5 rounded-md flex items-center justify-center ${b.is_interviewed ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-300'}`}>
+                              {b.is_interviewed && <Check size={12} strokeWidth={4} />}
+                            </div>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className={`w-5 h-5 rounded-md flex items-center justify-center ${b.is_hired ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-300'}`}>
+                              {b.is_hired && <Check size={12} strokeWidth={4} />}
+                            </div>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="text-sm text-slate-600">{b.hiring_rate}</span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="text-sm text-slate-600">{b.location}</span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="text-sm text-slate-600">{b.client_spend}</span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="flex items-center justify-end gap-2 relative">
+                              <button 
+                                onClick={() => {
+                                  setEditingBid(b);
+                                  setBidFormData(b);
+                                  setIsBidModalOpen(true);
+                                }}
+                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <div className="relative">
+                                <button 
+                                  onClick={() => setIsDeleteConfirmOpen(isDeleteConfirmOpen === b.id ? null : b.id)}
+                                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                                {isDeleteConfirmOpen === b.id && (
+                                  <div className="absolute right-0 bottom-full mb-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 p-4 z-50 animate-in fade-in slide-in-from-bottom-2">
+                                    <p className="text-xs font-bold text-slate-900 mb-3">Are you sure you want to delete this bid?</p>
+                                    <div className="flex gap-2">
+                                      <button 
+                                        onClick={() => setIsDeleteConfirmOpen(null)}
+                                        className="flex-1 px-3 py-1.5 text-[10px] font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors"
+                                      >
+                                        CANCEL
+                                      </button>
+                                      <button 
+                                        onClick={() => handleDeleteBid(b.id)}
+                                        className="flex-1 px-3 py-1.5 text-[10px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                                      >
+                                        DELETE
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={17} className="px-6 py-20 text-center">
+                            <div className="flex flex-col items-center gap-4">
+                              <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center">
+                                <Users className="text-slate-300" size={32} />
+                              </div>
+                              <div>
+                                <p className="text-slate-900 font-bold">No bids found</p>
+                                <p className="text-slate-500 text-sm">Get started by adding your first project bid.</p>
+                              </div>
+                              <button 
+                                onClick={() => setIsBidModalOpen(true)}
+                                className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors uppercase tracking-wider text-sm"
+                              >
+                                Add Bid
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
+          ) : view === 'list' ? (
             <motion.div
               key="list"
               initial={{ opacity: 0, y: 20 }}
@@ -1068,7 +2021,29 @@ export default function ProjectManagement() {
 
                       <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{project.project_type}</span>
-                        <button className="text-blue-600 font-bold text-sm hover:underline">View Details</button>
+                        <div className="flex items-center gap-4">
+                          <button 
+                            onClick={() => {
+                              setEditingMilestone(null);
+                              setMilestoneFormData({
+                                name: '',
+                                project_id: project.id,
+                                assignee_id: undefined,
+                                priority: 'Medium',
+                                start_date: '',
+                                end_date: '',
+                                notes: '',
+                                status: 'Active',
+                                completion_percentage: 0
+                              });
+                              setIsMilestoneModalOpen(true);
+                            }}
+                            className="text-red-600 font-black text-[10px] uppercase tracking-widest hover:underline"
+                          >
+                            Add Milestone
+                          </button>
+                          <button className="text-blue-600 font-bold text-sm hover:underline">View Details</button>
+                        </div>
                       </div>
                     </div>
                   ))}

@@ -46,15 +46,57 @@ export interface Shift {
   description: string;
 }
 
+export interface Company {
+  id: number;
+  name: string;
+}
+
+export interface Project {
+  id?: number;
+  company_id: number;
+  company_name: string;
+  project_name: string;
+  contact_person: string;
+  project_type: string;
+  duration: string;
+  assigned_to: string;
+  start_date: string;
+  end_date: string;
+  timeline_milestones: string;
+  status: string;
+  created_at?: string;
+}
+
+export interface Milestone {
+  id?: number;
+  company_id: number;
+  project_id: number;
+  project_name?: string;
+  name: string;
+  assignee_id: number;
+  assignee_name?: string;
+  priority: string;
+  start_date: string;
+  end_date: string;
+  notes: string;
+  status: string;
+  completion_percentage: number;
+  created_at?: string;
+}
+
 export interface AttendanceRecord {
   id: number;
   company_id: number;
   employee_id: number;
+  employee_name?: string;
+  emp_code?: string;
   shift_id?: number;
   date: string;
   date_str?: string;
   check_in?: string;
   check_out?: string;
+  break_in?: string;
+  break_out?: string;
   break_time?: number;
   status: string;
   is_late: boolean;

@@ -4,9 +4,17 @@ import db from '../db.ts';
 const router = Router();
 
 // Get all projects
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
+  const { company_id } = req.query;
   try {
-    const [rows] = await db.query('SELECT * FROM projects ORDER BY created_at DESC');
+    let query = 'SELECT * FROM projects';
+    const params = [];
+    if (company_id) {
+      query += ' WHERE company_id = ?';
+      params.push(company_id);
+    }
+    query += ' ORDER BY created_at DESC';
+    const [rows] = await db.query(query, params);
     res.json(rows);
   } catch (error) {
     console.error('Error fetching projects:', error);
@@ -17,6 +25,7 @@ router.get('/', async (_req, res) => {
 // Create a new project
 router.post('/', async (req, res) => {
   const {
+    company_id,
     company_name,
     project_name,
     contact_person,
@@ -28,9 +37,14 @@ router.post('/', async (req, res) => {
     timeline_milestones
   } = req.body;
 
+  if (!company_id) {
+    return res.status(400).json({ error: 'company_id is required' });
+  }
+
   try {
     const [result] = await db.query(
       `INSERT INTO projects (
+        company_id,
         company_name, 
         project_name, 
         contact_person, 
@@ -40,8 +54,9 @@ router.post('/', async (req, res) => {
         start_date, 
         end_date, 
         timeline_milestones
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        company_id,
         company_name,
         project_name,
         contact_person,

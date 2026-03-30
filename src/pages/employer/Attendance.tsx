@@ -3,34 +3,18 @@ import { Plus, Upload, Download, FileText, Calendar, Edit2, Trash2, ChevronDown,
 import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import AddAttendanceModal from '../../components/employer/AddAttendanceModal';
 import { fetchWithRetry } from '../../utils/fetchWithRetry';
-
-interface AttendanceRecord {
-  id: string;
-  employee_id: number;
-  employee_name: string;
-  emp_code: string;
-  date: string;
-  check_in: string;
-  check_out: string;
-  break_time: string | number;
-  status: string;
-  is_late: boolean;
-  working_hours: number;
-  overtime_hours: number;
-}
-
-interface Company {
-  id: number;
-  name: string;
-}
+import { AttendanceRecord, Company } from '../../types';
 
 export default function Attendance() {
   const [activeTab, setActiveTab] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [employees, setEmployees] = useState<{ id: number; name: string }[]>([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('All');
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+  const [editingRecord, setEditingRecord] = useState<AttendanceRecord | undefined>(undefined);
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,11 +34,24 @@ export default function Attendance() {
     }
   }, [isAdmin, context]);
 
+  useEffect(() => {
+    if (selectedCompanyId) {
+      fetchWithRetry(`/api/employees?company_id=${selectedCompanyId}`)
+        .then(res => res.json())
+        .then(data => setEmployees(data))
+        .catch(err => console.error("Error fetching employees:", err));
+    }
+  }, [selectedCompanyId]);
+
   const fetchAttendance = useCallback(async () => {
     if (!selectedCompanyId) return;
     setLoading(true);
     try {
-      const res = await fetchWithRetry(`/api/attendance?company_id=${selectedCompanyId}`);
+      let url = `/api/attendance?company_id=${selectedCompanyId}`;
+      if (selectedEmployeeId !== 'All') {
+        url += `&employee_id=${selectedEmployeeId}`;
+      }
+      const res = await fetchWithRetry(url);
       if (res.ok) {
         const data = await res.json();
         setAttendance(data);
@@ -64,26 +61,49 @@ export default function Attendance() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, selectedEmployeeId]);
 
   useEffect(() => {
     fetchAttendance();
   }, [fetchAttendance]);
 
   const filteredAttendance = attendance.filter(record => {
-    if (activeTab === 'All') return true;
-    if (activeTab === 'Present') return record.status === 'Present';
-    if (activeTab === 'On Leave') return record.status === 'On Leave';
-    if (activeTab === 'Half Days') return record.status === 'Half Day';
-    return true;
+    const matchesTab = activeTab === 'All' || 
+                      (activeTab === 'Present' && record.status === 'Present') ||
+                      (activeTab === 'On Leave' && record.status === 'On Leave') ||
+                      (activeTab === 'Half Days' && record.status === 'Half Day');
+    
+    return matchesTab;
   });
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("Are you sure you want to delete this attendance record?")) return;
+    try {
+      const res = await fetchWithRetry(`/api/attendance/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchAttendance();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to delete record");
+      }
+    } catch (error) {
+      console.error("Error deleting attendance:", error);
+    }
+  };
+
+  const handleEdit = (record: AttendanceRecord) => {
+    setEditingRecord(record);
+    setIsModalOpen(true);
+  };
 
   return (
     <div className="p-8 bg-slate-50 min-h-screen">
       <AddAttendanceModal 
         isOpen={isModalOpen} 
+        initialData={editingRecord}
         onClose={() => {
           setIsModalOpen(false);
+          setEditingRecord(undefined);
           fetchAttendance();
         }} 
         companyId={selectedCompanyId}
@@ -135,8 +155,15 @@ export default function Attendance() {
           <div className="flex-1 min-w-[200px]">
             <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Select Employee</label>
             <div className="relative">
-              <select className="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold appearance-none">
-                <option>All Employees</option>
+              <select 
+                className="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold appearance-none"
+                value={selectedEmployeeId}
+                onChange={(e) => setSelectedEmployeeId(e.target.value)}
+              >
+                <option value="All">All Employees</option>
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.name}</option>
+                ))}
               </select>
               <ChevronDown className="absolute right-3 top-2.5 text-slate-400" size={16} />
             </div>
@@ -176,8 +203,10 @@ export default function Attendance() {
                 <th className="p-4"><input type="checkbox" /></th>
                 <th className="p-4">Employees</th>
                 <th className="p-4">Date</th>
-                <th className="p-4">Clock In Time</th>
-                <th className="p-4">Clock Out Time</th>
+                <th className="p-4">Clock In</th>
+                <th className="p-4">Clock Out</th>
+                <th className="p-4">Break In</th>
+                <th className="p-4">Break Out</th>
                 <th className="p-4">Break Time</th>
                 <th className="p-4">Total Duration</th>
                 <th className="p-4">Is Late</th>
@@ -188,7 +217,7 @@ export default function Attendance() {
             <tbody className="divide-y divide-slate-100">
               {filteredAttendance.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-12 text-center text-slate-400 font-bold uppercase tracking-widest">
+                  <td colSpan={14} className="p-12 text-center text-slate-400 font-bold uppercase tracking-widest">
                     No attendance records found
                   </td>
                 </tr>
@@ -208,6 +237,8 @@ export default function Attendance() {
                     <td className="p-4 font-bold text-slate-700">{record.date}</td>
                     <td className="p-4 font-bold text-slate-700">{record.check_in || '-'}</td>
                     <td className="p-4 font-bold text-slate-700">{record.check_out || '-'}</td>
+                    <td className="p-4 font-bold text-slate-700">{record.break_in || '-'}</td>
+                    <td className="p-4 font-bold text-slate-700">{record.break_out || '-'}</td>
                     <td className="p-4 font-bold text-slate-700">{record.break_time} mins</td>
                     <td className="p-4 font-bold text-slate-700">{record.working_hours} hrs</td>
                     <td className="p-4">
@@ -229,8 +260,18 @@ export default function Attendance() {
                       </span>
                     </td>
                     <td className="p-4 flex gap-2">
-                      <button className="p-1.5 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100"><Edit2 size={14} /></button>
-                      <button className="p-1.5 bg-rose-50 text-rose-700 rounded hover:bg-rose-100"><Trash2 size={14} /></button>
+                      <button 
+                        onClick={() => handleEdit(record)}
+                        className="p-1.5 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(record.id)}
+                        className="p-1.5 bg-rose-50 text-rose-700 rounded hover:bg-rose-100"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </td>
                   </tr>
                 ))

@@ -81,15 +81,21 @@ export async function initializeDatabase(connection: Connection) {
   await connection.query(`
     CREATE TABLE IF NOT EXISTS shifts (
       id INT AUTO_INCREMENT PRIMARY KEY,
+      company_id INT,
       name VARCHAR(255) NOT NULL,
+      type VARCHAR(50) DEFAULT 'Fixed',
       start_time TIME NOT NULL,
       end_time TIME NOT NULL,
       break_time INT DEFAULT 60,
+      break_duration INT DEFAULT 60,
       grace_period INT DEFAULT 15,
       min_working_hours INT DEFAULT 8,
       late_mark_rule VARCHAR(255) DEFAULT '15',
+      description TEXT,
       status ENUM('Active', 'Deactive') DEFAULT 'Active',
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
     )
   `);
 
@@ -97,11 +103,11 @@ export async function initializeDatabase(connection: Connection) {
   const [existingShifts] = await connection.query('SELECT COUNT(*) as count FROM shifts') as [Record<string, unknown>[], unknown];
   if ((existingShifts[0] as { count: number }).count === 0) {
     await connection.query(`
-      INSERT INTO shifts (name, start_time, end_time, break_time, grace_period, min_working_hours, late_mark_rule, status)
+      INSERT INTO shifts (company_id, name, start_time, end_time, break_time, grace_period, min_working_hours, late_mark_rule, status)
       VALUES 
-      ('Morning', '09:00:00', '17:00:00', 60, 15, 8, '15', 'Active'),
-      ('Evening', '14:00:00', '22:00:00', 60, 15, 8, '15', 'Active'),
-      ('Night', '22:00:00', '06:00:00', 60, 15, 8, '15', 'Active')
+      (1, 'Morning', '09:00:00', '17:00:00', 60, 15, 8, '15', 'Active'),
+      (1, 'Evening', '14:00:00', '22:00:00', 60, 15, 8, '15', 'Active'),
+      (1, 'Night', '22:00:00', '06:00:00', 60, 15, 8, '15', 'Active')
     `);
   }
 
@@ -499,13 +505,19 @@ export async function initializeDatabase(connection: Connection) {
   } catch { /* Ignore */ }
   try {
     await connection.query("ALTER TABLE attendance ADD COLUMN check_in VARCHAR(10)");
-  } catch { /* Ignore */ }
+  } catch { /* Ignore if column exists */ }
   try {
     await connection.query("ALTER TABLE attendance ADD COLUMN check_out VARCHAR(10)");
-  } catch { /* Ignore */ }
+  } catch { /* Ignore if column exists */ }
+  try {
+    await connection.query("ALTER TABLE attendance ADD COLUMN break_in VARCHAR(10)");
+  } catch { /* Ignore if column exists */ }
+  try {
+    await connection.query("ALTER TABLE attendance ADD COLUMN break_out VARCHAR(10)");
+  } catch { /* Ignore if column exists */ }
   try {
     await connection.query("ALTER TABLE attendance ADD COLUMN break_time INT DEFAULT 0");
-  } catch { /* Ignore */ }
+  } catch { /* Ignore if column exists */ }
   try {
     await connection.query("ALTER TABLE attendance ADD COLUMN shift_id INT");
   } catch { /* Ignore */ }
@@ -960,6 +972,7 @@ export async function initializeDatabase(connection: Connection) {
   await connection.query(`
     CREATE TABLE IF NOT EXISTS projects (
       id INT AUTO_INCREMENT PRIMARY KEY,
+      company_id INT NOT NULL,
       company_name VARCHAR(255) NOT NULL,
       project_name VARCHAR(255) NOT NULL,
       contact_person VARCHAR(255) NOT NULL,
@@ -970,7 +983,29 @@ export async function initializeDatabase(connection: Connection) {
       end_date DATE NOT NULL,
       timeline_milestones TEXT,
       status VARCHAR(50) DEFAULT 'Active',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Create milestones table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS milestones (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      company_id INT NOT NULL,
+      project_id INT NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      assignee_id INT NOT NULL,
+      priority VARCHAR(50) DEFAULT 'Medium',
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      notes TEXT,
+      status VARCHAR(50) DEFAULT 'Active',
+      completion_percentage INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (assignee_id) REFERENCES employees(id) ON DELETE CASCADE
     )
   `);
 

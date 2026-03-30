@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, ReactNode } from 'react';
 import { ChevronDown, Loader2, ArrowLeft } from 'lucide-react';
 import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { fetchWithRetry } from '../../utils/fetchWithRetry';
+import { AttendanceRecord } from '../../types';
 
 interface Employee {
   id: number;
@@ -68,9 +69,9 @@ export default function AttendanceSummary() {
         const empData = await empRes.json();
         const attData = await attRes.json();
 
-        const processedEmployees = empData.map((emp: any) => {
+        const processedEmployees = empData.map((emp: Employee) => {
           const empAttendance: Record<string, string> = {};
-          attData.filter((a: any) => a.employee_id === emp.id).forEach((a: any) => {
+          attData.filter((a: AttendanceRecord) => a.employee_id === emp.id).forEach((a: AttendanceRecord) => {
             const day = parseInt(a.date.split('-')[2]);
             empAttendance[day] = a.status;
           });

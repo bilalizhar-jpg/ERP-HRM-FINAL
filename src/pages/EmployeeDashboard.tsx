@@ -308,11 +308,11 @@ export default function EmployeeDashboard() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
             { label: 'Schedule Time', value: `${stats?.monthly.scheduled} H`, icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50' },
-            { label: 'Worked Time', value: `${stats?.monthly.workedTime.toFixed(2)} H`, icon: Activity, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+            { label: 'Worked Time', value: `${stats?.monthly.workedTime.toFixed(2)} H`, icon: Activity, color: 'text-pink-600', bg: 'bg-pink-50' },
             { label: 'Over Time', value: `${stats?.monthly.overtime.toFixed(2)} H`, icon: Plus, color: 'text-indigo-600', bg: 'bg-indigo-50' },
             { label: 'Break Time', value: `${stats?.monthly.breakTime.toFixed(2)} H`, icon: Coffee, color: 'text-amber-600', bg: 'bg-amber-50' },
-            { label: 'Late Time', value: `${stats?.monthly.lateTime} H`, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
-            { label: "Total Leave's", value: `${stats?.monthly.totalLeaves} days`, icon: Calendar, color: 'text-pink-600', bg: 'bg-pink-50' },
+            { label: 'Late Days', value: `${stats?.monthly.lateTime} Days`, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
+            { label: "Total Leave's", value: `${stats?.monthly.totalLeaves} days`, icon: Calendar, color: 'text-emerald-600', bg: 'bg-emerald-50' },
           ].map((item, idx) => (
             <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-100 flex flex-col gap-4 hover:shadow-md transition-all">
               <div className={`w-12 h-12 rounded-2xl ${item.bg} ${item.color} flex items-center justify-center shrink-0`}>

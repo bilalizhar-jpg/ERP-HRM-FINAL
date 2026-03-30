@@ -1,11 +1,13 @@
 import { X, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { fetchWithRetry } from '../../utils/fetchWithRetry';
+import { AttendanceRecord } from '../../types';
 
 interface AddAttendanceModalProps {
   isOpen: boolean;
   onClose: () => void;
   companyId: number | null;
+  initialData?: AttendanceRecord;
 }
 
 interface Employee {
@@ -13,7 +15,7 @@ interface Employee {
   name: string;
 }
 
-export default function AddAttendanceModal({ isOpen, onClose, companyId }: AddAttendanceModalProps) {
+export default function AddAttendanceModal({ isOpen, onClose, companyId, initialData }: AddAttendanceModalProps) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -22,9 +24,37 @@ export default function AddAttendanceModal({ isOpen, onClose, companyId }: AddAt
     date: new Date().toISOString().split('T')[0],
     check_in: '09:00',
     check_out: '18:00',
+    break_in: '',
+    break_out: '',
     is_late: false,
     status: 'Present'
   });
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        employee_id: initialData.employee_id.toString(),
+        date: initialData.date,
+        check_in: initialData.check_in || '09:00',
+        check_out: initialData.check_out || '18:00',
+        break_in: initialData.break_in || '',
+        break_out: initialData.break_out || '',
+        is_late: !!initialData.is_late,
+        status: initialData.status || 'Present'
+      });
+    } else {
+      setFormData({
+        employee_id: '',
+        date: new Date().toISOString().split('T')[0],
+        check_in: '09:00',
+        check_out: '18:00',
+        break_in: '',
+        break_out: '',
+        is_late: false,
+        status: 'Present'
+      });
+    }
+  }, [initialData, isOpen]);
 
   useEffect(() => {
     if (isOpen && companyId) {
@@ -49,8 +79,11 @@ export default function AddAttendanceModal({ isOpen, onClose, companyId }: AddAt
     }
     setSubmitting(true);
     try {
-      const res = await fetchWithRetry('/api/attendance', {
-        method: 'POST',
+      const url = initialData ? `/api/attendance/${initialData.id}` : '/api/attendance';
+      const method = initialData ? 'PUT' : 'POST';
+      
+      const res = await fetchWithRetry(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
@@ -61,10 +94,10 @@ export default function AddAttendanceModal({ isOpen, onClose, companyId }: AddAt
         onClose();
       } else {
         const err = await res.json();
-        alert(err.error || "Failed to add attendance");
+        alert(err.error || `Failed to ${initialData ? 'update' : 'add'} attendance`);
       }
     } catch (error) {
-      console.error("Error adding attendance:", error);
+      console.error(`Error ${initialData ? 'updating' : 'adding'} attendance:`, error);
       alert("An error occurred");
     } finally {
       setSubmitting(false);
@@ -78,7 +111,7 @@ export default function AddAttendanceModal({ isOpen, onClose, companyId }: AddAt
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-            <X className="cursor-pointer" onClick={onClose} size={20} /> Add New Attendance
+            <X className="cursor-pointer" onClick={onClose} size={20} /> {initialData ? 'Edit Attendance' : 'Add New Attendance'}
           </h2>
         </div>
 
@@ -90,7 +123,7 @@ export default function AddAttendanceModal({ isOpen, onClose, companyId }: AddAt
                 className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"
                 value={formData.employee_id}
                 onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
-                disabled={loading}
+                disabled={loading || !!initialData}
               >
                 <option value="">{loading ? 'Loading...' : 'Select Employee...'}</option>
                 {employees.map(emp => (
@@ -134,6 +167,28 @@ export default function AddAttendanceModal({ isOpen, onClose, companyId }: AddAt
             </div>
           </div>
           <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-500 uppercase">Break In Time</label>
+            <div className="relative">
+              <input 
+                type="time" 
+                value={formData.break_in}
+                onChange={(e) => setFormData({ ...formData, break_in: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" 
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-500 uppercase">Break Out Time</label>
+            <div className="relative">
+              <input 
+                type="time" 
+                value={formData.break_out}
+                onChange={(e) => setFormData({ ...formData, break_out: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" 
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
             <label className="text-[10px] font-bold text-slate-500 uppercase">Is Late</label>
             <div className="flex gap-2">
               <button 
@@ -168,7 +223,7 @@ export default function AddAttendanceModal({ isOpen, onClose, companyId }: AddAt
             className="px-6 py-2 bg-indigo-900 text-white rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2"
           >
             {submitting && <Loader2 className="animate-spin" size={14} />}
-            {submitting ? 'Creating...' : 'Create'}
+            {submitting ? (initialData ? 'Updating...' : 'Creating...') : (initialData ? 'Update' : 'Create')}
           </button>
           <button onClick={onClose} className="px-6 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider">Cancel</button>
         </div>

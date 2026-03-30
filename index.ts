@@ -23,6 +23,7 @@ import noticesRouter from "./src/routes/notices";
 import messagesRouter from "./src/routes/messages";
 import aiRouter from "./src/routes/ai";
 import projectsRouter from "./src/routes/projects";
+import milestonesRouter from "./src/routes/milestones";
 import tasksRouter from "./src/routes/tasks";
 import employeesRouter from "./src/routes/employees";
 import monitoringRouter from "./src/routes/monitoring";
@@ -95,6 +96,7 @@ async function startServer() {
   app.use("/api/messages", messagesRouter);
   app.use("/api/ai", aiRouter);
   app.use("/api/projects", projectsRouter);
+  app.use("/api/milestones", milestonesRouter);
   app.use("/api/tasks", tasksRouter);
   app.use("/api/employees", employeesRouter);
   app.use("/api/monitoring", monitoringRouter);
@@ -664,6 +666,22 @@ app.use("/uploads", express.static(join(process.cwd(), "uploads")));
   });
 
   // Attendance API
+interface EmployeeShiftRow {
+  shift_id: number;
+}
+
+interface ShiftRow {
+  id: number;
+  start_time: string;
+  end_time: string;
+  grace_period: number;
+}
+
+interface AttendanceRow {
+  employee_id: number;
+  shift_id: number;
+}
+
   app.get("/api/attendance", async (req, res) => {
     let connection;
     try {
@@ -675,6 +693,8 @@ app.use("/uploads", express.static(join(process.cwd(), "uploads")));
                DATE_FORMAT(a.date, '%Y-%m-%d') as date,
                COALESCE(a.check_in, DATE_FORMAT(a.check_in_time, '%H:%i')) as check_in,
                COALESCE(a.check_out, DATE_FORMAT(a.check_out_time, '%H:%i')) as check_out,
+               COALESCE(a.break_in, DATE_FORMAT(a.break_start_time, '%H:%i')) as break_in,
+               COALESCE(a.break_out, DATE_FORMAT(a.break_end_time, '%H:%i')) as break_out,
                COALESCE(a.break_time, a.break_duration_minutes) as break_time,
                a.status, a.is_late, a.working_hours, a.overtime_hours,
                e.name as employee_name, e.employee_id as emp_code 
@@ -708,28 +728,164 @@ app.use("/uploads", express.static(join(process.cwd(), "uploads")));
   app.post("/api/attendance", async (req, res) => {
     let connection;
     try {
-      const { company_id, employee_id, shift_id, date, check_in, check_out, break_time, status, is_late, working_hours, overtime_hours } = req.body;
+      const { company_id, employee_id, date, check_in, check_out, break_in, break_out, break_time, status } = req.body;
+      let { shift_id, is_late, working_hours, overtime_hours } = req.body;
       connection = await db.getConnection();
+      
+      // Auto-calculate values if check_in and check_out are present
+      if (check_in && check_out) {
+        // Fetch shift info if not provided
+        if (!shift_id) {
+          const [empRows] = await connection.query("SELECT shift_id FROM employees WHERE id = ?", [employee_id]) as [EmployeeShiftRow[], unknown];
+          if (empRows.length > 0) shift_id = empRows[0].shift_id;
+        }
+
+        if (shift_id) {
+          const [shiftRows] = await connection.query("SELECT * FROM shifts WHERE id = ?", [shift_id]) as [ShiftRow[], unknown];
+          if (shiftRows.length > 0) {
+            const shift = shiftRows[0];
+            const [inH, inM] = check_in.split(':').map(Number);
+            const [outH, outM] = check_out.split(':').map(Number);
+            const [shiftInH, shiftInM] = String(shift.start_time).split(':').map(Number);
+            const [shiftOutH, shiftOutM] = String(shift.end_time).split(':').map(Number);
+
+            const inMinutes = inH * 60 + inM;
+            let outMinutes = outH * 60 + outM;
+            if (outMinutes < inMinutes) outMinutes += 24 * 60;
+
+            let breakMinutes = break_time || 0;
+            if (break_in && break_out) {
+              const [bInH, bInM] = break_in.split(':').map(Number);
+              const [bOutH, bOutM] = break_out.split(':').map(Number);
+              const bInMinutes = bInH * 60 + bInM;
+              let bOutMinutes = bOutH * 60 + bOutM;
+              if (bOutMinutes < bInMinutes) bOutMinutes += 24 * 60;
+              breakMinutes = bOutMinutes - bInMinutes;
+            }
+
+            const totalWorkedMinutes = outMinutes - inMinutes - breakMinutes;
+            working_hours = Math.max(0, totalWorkedMinutes / 60);
+
+            const shiftInMinutes = shiftInH * 60 + shiftInM;
+            let shiftOutMinutes = shiftOutH * 60 + shiftOutM;
+            if (shiftOutMinutes < shiftInMinutes) shiftOutMinutes += 24 * 60;
+
+            const shiftDurationMinutes = shiftOutMinutes - shiftInMinutes;
+            overtime_hours = Math.max(0, working_hours - (shiftDurationMinutes / 60));
+            is_late = inMinutes > (shiftInMinutes + (shift.grace_period || 0));
+          }
+        }
+      }
       
       // Upsert attendance record
       await connection.query(`
-        INSERT INTO attendance (company_id, employee_id, shift_id, date, check_in, check_out, break_time, status, is_late, working_hours, overtime_hours)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO attendance (company_id, employee_id, shift_id, date, check_in, check_out, break_in, break_out, break_time, status, is_late, working_hours, overtime_hours)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           shift_id = VALUES(shift_id),
           check_in = VALUES(check_in),
           check_out = VALUES(check_out),
+          break_in = VALUES(break_in),
+          break_out = VALUES(break_out),
           break_time = VALUES(break_time),
           status = VALUES(status),
           is_late = VALUES(is_late),
           working_hours = VALUES(working_hours),
           overtime_hours = VALUES(overtime_hours)
-      `, [company_id, employee_id, shift_id || null, date, check_in || null, check_out || null, break_time || 0, status, is_late || false, working_hours || 0, overtime_hours || 0]);
+      `, [company_id, employee_id, shift_id || null, date, check_in || null, check_out || null, break_in || null, break_out || null, break_time || 0, status, is_late || false, working_hours || 0, overtime_hours || 0]);
       
       res.json({ success: true });
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Error saving attendance:", err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.put("/api/attendance/:id", async (req, res) => {
+    let connection;
+    try {
+      const { id } = req.params;
+      const { check_in, check_out, break_in, break_out, break_time, status } = req.body;
+      let { is_late, working_hours, overtime_hours, employee_id, shift_id } = req.body;
+      connection = await db.getConnection();
+
+      // Auto-calculate values if check_in and check_out are present
+      if (check_in && check_out) {
+        // Fetch employee_id and shift_id if not provided
+        if (!employee_id || !shift_id) {
+          const [attRows] = await connection.query("SELECT employee_id, shift_id FROM attendance WHERE id = ?", [id]) as [AttendanceRow[], unknown];
+          if (attRows.length > 0) {
+            employee_id = employee_id || attRows[0].employee_id;
+            shift_id = shift_id || attRows[0].shift_id;
+          }
+        }
+
+        if (shift_id) {
+          const [shiftRows] = await connection.query("SELECT * FROM shifts WHERE id = ?", [shift_id]) as [ShiftRow[], unknown];
+          if (shiftRows.length > 0) {
+            const shift = shiftRows[0];
+            const [inH, inM] = check_in.split(':').map(Number);
+            const [outH, outM] = check_out.split(':').map(Number);
+            const [shiftInH, shiftInM] = String(shift.start_time).split(':').map(Number);
+            const [shiftOutH, shiftOutM] = String(shift.end_time).split(':').map(Number);
+
+            const inMinutes = inH * 60 + inM;
+            let outMinutes = outH * 60 + outM;
+            if (outMinutes < inMinutes) outMinutes += 24 * 60;
+
+            let breakMinutes = break_time || 0;
+            if (break_in && break_out) {
+              const [bInH, bInM] = break_in.split(':').map(Number);
+              const [bOutH, bOutM] = break_out.split(':').map(Number);
+              const bInMinutes = bInH * 60 + bInM;
+              let bOutMinutes = bOutH * 60 + bOutM;
+              if (bOutMinutes < bInMinutes) bOutMinutes += 24 * 60;
+              breakMinutes = bOutMinutes - bInMinutes;
+            }
+
+            const totalWorkedMinutes = outMinutes - inMinutes - breakMinutes;
+            working_hours = Math.max(0, totalWorkedMinutes / 60);
+
+            const shiftInMinutes = shiftInH * 60 + shiftInM;
+            let shiftOutMinutes = shiftOutH * 60 + shiftOutM;
+            if (shiftOutMinutes < shiftInMinutes) shiftOutMinutes += 24 * 60;
+
+            const shiftDurationMinutes = shiftOutMinutes - shiftInMinutes;
+            overtime_hours = Math.max(0, working_hours - (shiftDurationMinutes / 60));
+            is_late = inMinutes > (shiftInMinutes + (shift.grace_period || 0));
+          }
+        }
+      }
+      
+      await connection.query(`
+        UPDATE attendance 
+        SET check_in = ?, check_out = ?, break_in = ?, break_out = ?, break_time = ?, status = ?, is_late = ?, working_hours = ?, overtime_hours = ?
+        WHERE id = ?
+      `, [check_in || null, check_out || null, break_in || null, break_out || null, break_time || 0, status, is_late || false, working_hours || 0, overtime_hours || 0, id]);
+      
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error updating attendance:", err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.delete("/api/attendance/:id", async (req, res) => {
+    let connection;
+    try {
+      const { id } = req.params;
+      connection = await db.getConnection();
+      await connection.query("DELETE FROM attendance WHERE id = ?", [id]);
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error deleting attendance:", err);
       res.status(500).json({ error: err.message });
     } finally {
       if (connection) connection.release();
@@ -896,15 +1052,27 @@ app.use("/uploads", express.static(join(process.cwd(), "uploads")));
       }
 
       const calculateDuration = (start: string, end: string) => {
-        if (!start || !end) return 9;
+        if (!start || !end) return 8;
         const [sH, sM] = start.split(':').map(Number);
         const [eH, eM] = end.split(':').map(Number);
         let diff = (eH * 60 + eM) - (sH * 60 + sM);
         if (diff < 0) diff += 24 * 60; // Overnight shift
-        return diff / 60;
+        return (diff - (shiftInfo?.break_time || 60)) / 60;
       };
 
-      const scheduledHours = shiftInfo ? calculateDuration(String(shiftInfo.start_time), String(shiftInfo.end_time)) : 9;
+      const scheduledHoursPerDay = shiftInfo ? calculateDuration(String(shiftInfo.start_time), String(shiftInfo.end_time)) : 8;
+
+      // Calculate working days in current month so far
+      const getWorkingDaysInMonth = (year: number, month: number) => {
+        let count = 0;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+          const day = new Date(year, month, d).getDay();
+          if (day !== 0 && day !== 6) count++; // Exclude weekends
+        }
+        return count;
+      };
+      const workingDays = getWorkingDaysInMonth(now.getFullYear(), now.getMonth());
 
       res.json({
         today: {
@@ -912,11 +1080,11 @@ app.use("/uploads", express.static(join(process.cwd(), "uploads")));
           punchOut: todayAttendance.length > 0 ? [...todayAttendance].sort((a, b) => new Date(b.check_out_time || 0).getTime() - new Date(a.check_out_time || 0).getTime())[0].check_out_time : null,
           workedTime: workedTimeToday,
           breakTime: breakTimeToday / 60,
-          scheduled: scheduledHours,
-          leftTime: Math.max(0, scheduledHours - workedTimeToday)
+          scheduled: scheduledHoursPerDay,
+          leftTime: Math.max(0, scheduledHoursPerDay - workedTimeToday)
         },
         monthly: {
-          scheduled: 22 * scheduledHours,
+          scheduled: (workingDays * scheduledHoursPerDay).toFixed(2),
           workedTime: monthlyWorkedTime,
           overtime: monthlyOvertime,
           breakTime: monthlyBreakTime / 60,

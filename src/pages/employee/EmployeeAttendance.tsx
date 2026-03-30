@@ -18,6 +18,7 @@ export default function EmployeeAttendance() {
   const [loading, setLoading] = useState(true);
   const [attendanceList, setAttendanceList] = useState<AttendanceRecord[]>([]);
   const [shift, setShift] = useState<ShiftInfo | null>(null);
+  const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const { employee } = useOutletContext<{ employee: Employee | null }>();
 
   const fetchAttendanceData = useCallback(async () => {
@@ -38,12 +39,13 @@ export default function EmployeeAttendance() {
         
         // Determine current status based on today's attendance
         const todayStr = new Date().toISOString().split('T')[0];
-        const todayRecord = data.attendanceList?.find((a: any) => a.date_str === todayStr || a.date.startsWith(todayStr));
+        const foundRecord = data.attendanceList?.find((a: AttendanceRecord) => a.date_str === todayStr || a.date.startsWith(todayStr));
+        setTodayRecord(foundRecord || null);
         
-        if (todayRecord) {
-          if (todayRecord.check_out) {
+        if (foundRecord) {
+          if (foundRecord.check_out) {
             setStatus('Clocked Out');
-          } else if (todayRecord.status === 'On Break') {
+          } else if (foundRecord.status === 'On Break') {
             setStatus('On Break');
           } else {
             setStatus('Clocked In');
@@ -67,20 +69,25 @@ export default function EmployeeAttendance() {
     if (!employee?.id) return;
     
     const todayStr = new Date().toISOString().split('T')[0];
-    const todayRecord = attendanceList.find((a: any) => a.date_str === todayStr || a.date.startsWith(todayStr));
     
     let checkIn = todayRecord?.check_in;
     let checkOut = todayRecord?.check_out;
-    let newStatus = action === 'Break Out' ? 'Present' : action === 'On Break' ? 'On Break' : action === 'Clock In' ? 'Present' : 'Present';
+    let breakIn = todayRecord?.break_in;
+    let breakOut = todayRecord?.break_out;
+    const newStatus = action === 'Break Out' ? 'Present' : action === 'On Break' ? 'On Break' : action === 'Clock In' ? 'Present' : 'Checked-Out';
     
     const now = new Date();
     const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     
     if (action === 'Clock In') {
-      // Use shift start time if available, otherwise current time
-      checkIn = shift?.start_time ? shift.start_time.substring(0, 5) : currentTimeStr;
+      checkIn = todayRecord?.check_in || currentTimeStr;
+      checkOut = undefined;
     } else if (action === 'Clock Out') {
       checkOut = currentTimeStr;
+    } else if (action === 'On Break') {
+      breakIn = currentTimeStr;
+    } else if (action === 'Break Out') {
+      breakOut = currentTimeStr;
     }
 
     try {
@@ -94,12 +101,14 @@ export default function EmployeeAttendance() {
           date: todayStr,
           check_in: checkIn,
           check_out: checkOut,
+          break_in: breakIn,
+          break_out: breakOut,
           status: newStatus,
         })
       });
       
       if (res.ok) {
-        setStatus(action === 'Break Out' ? 'Clocked In' : action);
+        setStatus(action === 'Break Out' ? 'Clocked In' : action === 'Clock In' ? 'Clocked In' : action === 'Clock Out' ? 'Clocked Out' : action);
         fetchAttendanceData();
       }
     } catch (error) {
@@ -143,7 +152,7 @@ export default function EmployeeAttendance() {
               disabled={status !== 'Clocked Out'}
               className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold uppercase hover:bg-emerald-700 disabled:opacity-50"
             >
-              Clock In
+              {todayRecord?.check_out ? 'Re-checkin' : 'Clock In'}
             </button>
             <button 
               onClick={() => handleAttendanceAction('On Break')} 
@@ -188,21 +197,25 @@ export default function EmployeeAttendance() {
                 <th className="p-2">Date</th>
                 <th className="p-2">Clock In</th>
                 <th className="p-2">Clock Out</th>
+                <th className="p-2">Break In</th>
+                <th className="p-2">Break Out</th>
                 <th className="p-2">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {attendanceList.map((record: any, index: number) => (
+              {attendanceList.map((record: AttendanceRecord, index: number) => (
                 <tr key={index}>
                   <td className="p-2">{record.date_str || format(new Date(record.date), 'yyyy-MM-dd')}</td>
                   <td className="p-2">{record.check_in || '-'}</td>
                   <td className="p-2">{record.check_out || '-'}</td>
+                  <td className="p-2">{record.break_in || '-'}</td>
+                  <td className="p-2">{record.break_out || '-'}</td>
                   <td className="p-2 text-emerald-600 font-bold">{record.status}</td>
                 </tr>
               ))}
               {attendanceList.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-4 text-center text-slate-500">No attendance records found.</td>
+                  <td colSpan={6} className="p-4 text-center text-slate-500">No attendance records found.</td>
                 </tr>
               )}
             </tbody>
