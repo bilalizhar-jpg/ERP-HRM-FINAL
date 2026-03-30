@@ -1030,6 +1030,34 @@ export async function initializeDatabase(connection: Connection) {
     )
   `);
 
+  // Create bids table
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS bids (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      date DATE NOT NULL,
+      bidder_id INT NOT NULL,
+      source VARCHAR(255) NOT NULL,
+      job_title VARCHAR(255) NOT NULL,
+      job_link TEXT NOT NULL,
+      profile VARCHAR(100) DEFAULT 'Agency',
+      bid_type VARCHAR(100) DEFAULT 'Hourly',
+      bid_rate VARCHAR(100),
+      connects INT DEFAULT 0,
+      boosted INT DEFAULT 0,
+      is_viewed BOOLEAN DEFAULT FALSE,
+      is_interviewed BOOLEAN DEFAULT FALSE,
+      is_hired BOOLEAN DEFAULT FALSE,
+      hiring_rate VARCHAR(100),
+      location VARCHAR(255),
+      client_spend VARCHAR(100),
+      company_id INT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+      FOREIGN KEY (bidder_id) REFERENCES employees(id) ON DELETE CASCADE
+    )
+  `);
+
   // Create task_activities table
   await connection.query(`
     CREATE TABLE IF NOT EXISTS task_activities (

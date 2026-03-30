@@ -1683,6 +1683,112 @@ interface AttendanceRow {
     }
   });
 
+  // Logout
+  app.post("/api/logout", (req, res) => {
+    res.json({ success: true, message: "Logged out successfully" });
+  });
+
+  // Bids API
+  app.get("/api/bids", async (req, res) => {
+    const { company_id } = req.query;
+    let connection;
+    try {
+      connection = await db.getConnection();
+      const [bids] = await connection.query(
+        "SELECT b.*, e.name as bidder_name FROM bids b LEFT JOIN employees e ON b.bidder_id = e.id WHERE b.company_id = ?",
+        [company_id]
+      ) as [Record<string, unknown>[], unknown];
+      res.json(bids);
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.post("/api/bids", async (req, res) => {
+    const { 
+      date, bidder_id, source, job_title, job_link, profile, 
+      bid_type, bid_rate, connects, boosted, is_viewed, 
+      is_interviewed, is_hired, hiring_rate, location, 
+      client_spend, company_id 
+    } = req.body;
+    let connection;
+    try {
+      connection = await db.getConnection();
+      const [result] = await connection.query(
+        `INSERT INTO bids (
+          date, bidder_id, source, job_title, job_link, profile, 
+          bid_type, bid_rate, connects, boosted, is_viewed, 
+          is_interviewed, is_hired, hiring_rate, location, 
+          client_spend, company_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          date, bidder_id, source, job_title, job_link, profile, 
+          bid_type, bid_rate, connects, boosted, is_viewed, 
+          is_interviewed, is_hired, hiring_rate, location, 
+          client_spend, company_id
+        ]
+      ) as [any, unknown]; // eslint-disable-line @typescript-eslint/no-explicit-any
+      res.json({ id: result.insertId, success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.put("/api/bids/:id", async (req, res) => {
+    const { id } = req.params;
+    const { 
+      date, bidder_id, source, job_title, job_link, profile, 
+      bid_type, bid_rate, connects, boosted, is_viewed, 
+      is_interviewed, is_hired, hiring_rate, location, 
+      client_spend 
+    } = req.body;
+    let connection;
+    try {
+      connection = await db.getConnection();
+      await connection.query(
+        `UPDATE bids SET 
+          date = ?, bidder_id = ?, source = ?, job_title = ?, job_link = ?, 
+          profile = ?, bid_type = ?, bid_rate = ?, connects = ?, boosted = ?, 
+          is_viewed = ?, is_interviewed = ?, is_hired = ?, hiring_rate = ?, 
+          location = ?, client_spend = ?
+        WHERE id = ?`,
+        [
+          date, bidder_id, source, job_title, job_link, profile, 
+          bid_type, bid_rate, connects, boosted, is_viewed, 
+          is_interviewed, is_hired, hiring_rate, location, 
+          client_spend, id
+        ]
+      );
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.delete("/api/bids/:id", async (req, res) => {
+    const { id } = req.params;
+    let connection;
+    try {
+      connection = await db.getConnection();
+      await connection.query("DELETE FROM bids WHERE id = ?", [id]);
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const err = error as Error;
+      res.status(500).json({ error: err.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
   // Create a new company
   app.post("/api/companies", async (req, res) => {
     const { 
