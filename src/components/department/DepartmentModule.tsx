@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, Download, FileSpreadsheet, FileText, XCircle } fro
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
 
 interface Department {
   id: number;
@@ -33,7 +34,7 @@ export default function DepartmentModule({ companyId }: DepartmentModuleProps) {
   const fetchDepartments = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/departments?company_id=${companyId}`);
+      const res = await fetchWithRetry(`/api/departments?company_id=${companyId}`);
       if (res.ok) {
         const data = await res.json();
         setDepartments(data);
@@ -70,7 +71,7 @@ export default function DepartmentModule({ companyId }: DepartmentModuleProps) {
         company_id: companyId
       };
 
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -109,7 +110,7 @@ export default function DepartmentModule({ companyId }: DepartmentModuleProps) {
     if (!deleteConfirmId) return;
     
     try {
-      const res = await fetch(`/api/departments/${deleteConfirmId}`, {
+      const res = await fetchWithRetry(`/api/departments/${deleteConfirmId}`, {
         method: 'DELETE'
       });
       

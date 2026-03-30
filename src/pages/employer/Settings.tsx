@@ -4,6 +4,7 @@ import SuperAdminSidebar from '../../components/SuperAdminSidebar';
 import { Upload } from 'lucide-react';
 import EmployerGmailIntegration from './EmployerGmailIntegration';
 import EmployerWhatsAppIntegration from './EmployerWhatsAppIntegration';
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
 
 export default function Settings() {
   const location = useLocation();
@@ -40,7 +41,7 @@ export default function Settings() {
       
       // First, check if server is reachable
       try {
-        const pingRes = await fetch('/api/ping');
+        const pingRes = await fetchWithRetry('/api/ping');
         if (pingRes.ok) {
           setIsServerUp(true);
         } else {
@@ -52,10 +53,9 @@ export default function Settings() {
         throw new Error('Server is unreachable. Please check if the backend is running.');
       }
 
-      const [profileRes, rulesRes, shiftsRes] = await Promise.all([
-        fetch('/api/employer/settings/profile'),
-        fetch('/api/employer/settings/rules'),
-        fetch('/api/employer/settings/shifts')
+      const [profileRes, rulesRes] = await Promise.all([
+        fetchWithRetry('/api/employer/settings/profile'),
+        fetchWithRetry('/api/employer/settings/rules')
       ]);
 
       if (profileRes.ok) {
@@ -71,12 +71,6 @@ export default function Settings() {
         const rulesData = await rulesRes.json();
         console.log('Rules data loaded:', rulesData);
         setRules(rulesData);
-      }
-
-      if (shiftsRes.ok) {
-        const shiftsData = await shiftsRes.json();
-        console.log('Shifts data loaded:', shiftsData);
-        setShifts(shiftsData);
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -514,54 +508,10 @@ export default function Settings() {
     'Pacific/Wallis'
   ];
 
-  type Shift = {
-    id: string;
-    name: string;
-    startTime: string;
-    endTime: string;
-    breakTime: number;
-    gracePeriod: number;
-    minWorkingHours: number;
-    lateMarkRule: string;
-    status: 'Active' | 'Deactive';
-  };
-
-  const [shifts, setShifts] = useState<Shift[]>([
-    { id: '1', name: 'Morning', startTime: '09:00', endTime: '17:00', breakTime: 60, gracePeriod: 15, minWorkingHours: 8, lateMarkRule: '15', status: 'Active' },
-    { id: '2', name: 'Evening', startTime: '14:00', endTime: '22:00', breakTime: 60, gracePeriod: 15, minWorkingHours: 8, lateMarkRule: '15', status: 'Active' },
-    { id: '3', name: 'Night', startTime: '22:00', endTime: '06:00', breakTime: 60, gracePeriod: 15, minWorkingHours: 8, lateMarkRule: '15', status: 'Active' },
-  ]);
-
-  const calculateShiftMetrics = (shift: Shift) => {
-    const start = new Date(`1970-01-01T${shift.startTime}:00`);
-    const end = new Date(`1970-01-01T${shift.endTime}:00`);
-    
-    // Handle overnight shifts
-    if (end <= start) {
-      end.setDate(end.getDate() + 1);
-    }
-    
-    const durationMs = end.getTime() - start.getTime();
-    const durationHours = durationMs / (1000 * 60 * 60);
-    const breakHours = shift.breakTime / 60;
-    const netWorkingHours = Math.max(0, durationHours - breakHours);
-    const overtime = Math.max(0, netWorkingHours - shift.minWorkingHours);
-    
-    return {
-      duration: durationHours.toFixed(2),
-      netWorkingHours: netWorkingHours.toFixed(2),
-      overtime: overtime.toFixed(2)
-    };
-  };
-
-  const updateShift = (id: string, field: keyof Shift, value: string | number) => {
-    setShifts(shifts.map(s => s.id === id ? { ...s, [field]: value } : s));
-  };
-
   const handleSaveProfile = async () => {
     try {
       console.log('Attempting to save company profile:', companyProfile);
-      const response = await fetch('/api/employer/settings/profile', {
+      const response = await fetchWithRetry('/api/employer/settings/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(companyProfile),
@@ -584,7 +534,7 @@ export default function Settings() {
   const handleSaveRules = async () => {
     try {
       console.log('Attempting to save business rules:', rules);
-      const response = await fetch('/api/employer/settings/rules', {
+      const response = await fetchWithRetry('/api/employer/settings/rules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(rules),
@@ -600,29 +550,6 @@ export default function Settings() {
       }
     } catch (error) {
       console.error('Error saving rules:', error);
-      alert('An error occurred while saving.');
-    }
-  };
-
-  const handleSaveShift = async (shift: Shift) => {
-    try {
-      console.log(`Attempting to save shift ${shift.name}:`, shift);
-      const response = await fetch('/api/employer/settings/shifts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(shift),
-      });
-      if (response.ok) {
-        console.log(`Shift ${shift.name} saved successfully.`);
-        alert(`${shift.name} shift updated successfully!`);
-        await fetchSettings(); // Reload data to confirm persistence
-      } else {
-        const errData = await response.json();
-        console.error(`Failed to update shift ${shift.name}:`, errData);
-        alert(`Failed to update shift: ${errData.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Error updating shift:', error);
       alert('An error occurred while saving.');
     }
   };
@@ -766,88 +693,6 @@ export default function Settings() {
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20" 
             />
           </div>
-        </div>
-      </section>
-
-      {/* Working Hours Setting Section */}
-      <section className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-lg font-black text-slate-900 uppercase tracking-wider">Working Hours Setting</h2>
-          <p className="text-xs font-bold text-slate-500 uppercase">Manage shifts and grace periods</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {shifts.map((shift) => {
-            const metrics = calculateShiftMetrics(shift);
-            const isActive = shift.status === 'Active';
-            
-            return (
-              <div key={shift.id} className={`bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4 transition-all ${!isActive ? 'opacity-60 grayscale-[0.5]' : ''}`}>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-sm font-black text-slate-900 uppercase">{shift.name} Shift</h3>
-                    <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
-                      isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                    }`}>
-                      {shift.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => updateShift(shift.id, 'status', isActive ? 'Deactive' : 'Active')}
-                      className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm ${
-                        isActive 
-                        ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200' 
-                        : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
-                      }`}
-                    >
-                      {isActive ? 'Deactivate' : 'Activate'}
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Start Time</label>
-                    <input type="time" value={shift.startTime || ''} onChange={e => updateShift(shift.id, 'startTime', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">End Time</label>
-                    <input type="time" value={shift.endTime || ''} onChange={e => updateShift(shift.id, 'endTime', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Break (min)</label>
-                    <input type="number" value={shift.breakTime ?? 0} onChange={e => updateShift(shift.id, 'breakTime', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Grace (min)</label>
-                    <input type="number" value={shift.gracePeriod ?? 0} onChange={e => updateShift(shift.id, 'gracePeriod', parseInt(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" disabled={!isActive} />
-                  </div>
-                </div>
-                <div className="pt-4 border-t border-slate-200 grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">Duration</p>
-                    <p className="text-sm font-black text-slate-900">{metrics.duration}h</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">Break</p>
-                    <p className="text-sm font-black text-slate-900">{shift.breakTime / 60}h</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">Net Hours</p>
-                    <p className="text-sm font-black text-emerald-600">{metrics.netWorkingHours}h</p>
-                  </div>
-                </div>
-                <div className="pt-4 border-t border-slate-200 flex justify-between items-center">
-                  <p className="text-xs font-bold text-slate-600">Overtime: <span className="font-black text-rose-600">{metrics.overtime}h</span></p>
-                  <button 
-                    onClick={() => handleSaveShift(shift)}
-                    className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Save Shift
-                  </button>
-                </div>
-              </div>
-            );
-          })}
         </div>
       </section>
     </div>

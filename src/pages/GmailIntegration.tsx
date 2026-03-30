@@ -13,6 +13,7 @@ import {
   History
 } from 'lucide-react';
 import SuperAdminSidebar from '../components/SuperAdminSidebar';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 export default function GmailIntegration() {
   const [status, setStatus] = useState<'connected' | 'disconnected' | 'loading'>('loading');
@@ -40,7 +41,7 @@ export default function GmailIntegration() {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch('/api/gmail/status');
+      const res = await fetchWithRetry('/api/gmail/status');
       const data = await res.json();
       setStatus(data.connected ? 'connected' : 'disconnected');
       setLastSync(data.lastSync);
@@ -52,7 +53,7 @@ export default function GmailIntegration() {
 
   const fetchSmtpSettings = async (companyId: string) => {
     try {
-      const res = await fetch(`/api/smtp/settings?companyId=${companyId}`);
+      const res = await fetchWithRetry(`/api/smtp/settings?companyId=${companyId}`);
       if (res.ok) {
         const data = await res.json();
         if (data) {
@@ -77,7 +78,7 @@ export default function GmailIntegration() {
   const handleSaveSmtp = async () => {
     setIsSavingSmtp(true);
     try {
-      const res = await fetch('/api/smtp/settings', {
+      const res = await fetchWithRetry('/api/smtp/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,7 +102,7 @@ export default function GmailIntegration() {
   const handleSendSmtpTest = async () => {
     setIsSendingSmtpTest(true);
     try {
-      const res = await fetch('/api/smtp/send-test', {
+      const res = await fetchWithRetry('/api/smtp/send-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(smtpSettings)
@@ -122,7 +123,7 @@ export default function GmailIntegration() {
 
   const handleConnect = async () => {
     try {
-      const res = await fetch('/api/gmail/auth-url');
+      const res = await fetchWithRetry('/api/gmail/auth-url');
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url;
@@ -139,7 +140,7 @@ export default function GmailIntegration() {
   const handleSendTestEmail = async () => {
     setIsSendingTest(true);
     try {
-      const res = await fetch('/api/gmail/send-test', { method: 'POST' });
+      const res = await fetchWithRetry('/api/gmail/send-test', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         alert('Test email sent successfully!');

@@ -10,10 +10,12 @@ import {
   Video, 
   Info, 
   Plus,
-  User,
+  User as UserIcon,
   Circle,
   X
 } from 'lucide-react';
+import { Employee, User } from '../../types';
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
 
 interface Message {
   id: number;
@@ -36,13 +38,6 @@ interface Chat {
   name?: string;
   last_message?: string;
   last_message_at?: string;
-}
-
-interface Employee {
-  id: number;
-  name: string;
-  email: string;
-  profile_picture?: string;
 }
 
 export default function ChatSystem() {
@@ -85,7 +80,7 @@ export default function ChatSystem() {
   const handleAddReaction = async (messageId: number, emoji: string) => {
     if (!currentUser) return;
     try {
-      await fetch('/api/messages/reactions', {
+      await fetchWithRetry('/api/messages/reactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message_id: messageId, user_id: currentUser.id, emoji })
@@ -119,7 +114,7 @@ export default function ChatSystem() {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/messages/upload', {
+      const res = await fetchWithRetry('/api/messages/upload', {
         method: 'POST',
         body: formData
       });
@@ -134,7 +129,7 @@ export default function ChatSystem() {
           file_name: data.fileName
         };
 
-        const msgRes = await fetch('/api/messages', {
+        const msgRes = await fetchWithRetry('/api/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(messageData)
@@ -168,7 +163,7 @@ export default function ChatSystem() {
 
   const handleEditMessage = async (id: number, content: string) => {
     try {
-      await fetch(`/api/messages/${id}`, {
+      await fetchWithRetry(`/api/messages/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content })
@@ -183,7 +178,7 @@ export default function ChatSystem() {
   const handleDeleteMessage = async (id: number) => {
     if (!window.confirm('Are you sure you want to delete this message?')) return;
     try {
-      await fetch(`/api/messages/${id}`, { method: 'DELETE' });
+      await fetchWithRetry(`/api/messages/${id}`, { method: 'DELETE' });
       setMessages(prev => prev.map(m => m.id === id ? { ...m, is_deleted: true } : m));
     } catch (error) {
       console.error('Error deleting message:', error);
@@ -193,7 +188,7 @@ export default function ChatSystem() {
   const handleInviteGuest = async () => {
     if (!activeChat || !currentUser || !inviteEmail) return;
     try {
-      const res = await fetch('/api/messages/invite-guest', {
+      const res = await fetchWithRetry('/api/messages/invite-guest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -219,7 +214,7 @@ export default function ChatSystem() {
 
   const fetchChats = useCallback(async (userId: number) => {
     try {
-      const res = await fetch(`/api/messages/chats?user_id=${userId}`);
+      const res = await fetchWithRetry(`/api/messages/chats?user_id=${userId}`);
       const data = await res.json();
       setChats(data);
     } catch (error) {
@@ -229,7 +224,7 @@ export default function ChatSystem() {
 
   const fetchEmployees = useCallback(async (companyId: number) => {
     try {
-      const res = await fetch(`/api/messages/employees?company_id=${companyId}`);
+      const res = await fetchWithRetry(`/api/messages/employees?company_id=${companyId}`);
       const data = await res.json();
       setEmployees(data);
     } catch (error) {
@@ -239,7 +234,7 @@ export default function ChatSystem() {
 
   const fetchMessages = useCallback(async (chatId: number) => {
     try {
-      const res = await fetch(`/api/messages/${chatId}`);
+      const res = await fetchWithRetry(`/api/messages/${chatId}`);
       const data = await res.json();
       setMessages(data);
     } catch (error) {
@@ -250,7 +245,7 @@ export default function ChatSystem() {
   const markMessagesAsRead = useCallback(async (chatId: number) => {
     if (!currentUser) return;
     try {
-      await fetch(`/api/messages/read/${chatId}`, {
+      await fetchWithRetry(`/api/messages/read/${chatId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: currentUser.id })
@@ -262,17 +257,11 @@ export default function ChatSystem() {
   }, [currentUser, socket]);
 
   useEffect(() => {
-    const userData = localStorage.getItem('employee');
+    const employeeId = localStorage.getItem('employeeId');
     const guestData = localStorage.getItem('guest');
     
-    let user = null;
-    if (userData) {
-      user = JSON.parse(userData);
-    } else if (guestData) {
-      user = JSON.parse(guestData);
-    }
-
-    if (user) {
+    const initializeUser = (user: User | null) => {
+      if (!user) return;
       setCurrentUser(user);
       
       // Initialize socket
@@ -282,8 +271,10 @@ export default function ChatSystem() {
       // Fetch initial data
       if (!user.isGuest) {
         fetchChats(user.id);
-        fetchEmployees(user.company_id);
-      } else {
+        if (user.company_id) {
+          fetchEmployees(user.company_id);
+        }
+      } else if (user.chat_id) {
         // Guest only sees the chat they were invited to
         const guestChat: Chat = {
           id: user.chat_id,
@@ -298,6 +289,23 @@ export default function ChatSystem() {
       return () => {
         newSocket.close();
       };
+    };
+
+    if (employeeId) {
+      fetchWithRetry(`/api/employees/${employeeId}`)
+        .then(async res => {
+          if (!res.ok) throw new Error(await res.text());
+          return res.json();
+        })
+        .then(data => {
+          if (data.success) {
+            initializeUser(data.employee);
+          }
+        })
+        .catch(err => console.error("Error fetching employee for chat:", err));
+    } else if (guestData) {
+      const user = JSON.parse(guestData);
+      initializeUser(user);
     }
   }, [fetchMessages, fetchChats, fetchEmployees]);
 
@@ -359,7 +367,7 @@ export default function ChatSystem() {
       type: 'text'
     };
 
-    fetch('/api/messages', {
+    fetchWithRetry('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(messageData)
@@ -396,7 +404,7 @@ export default function ChatSystem() {
     };
 
     try {
-      const res = await fetch('/api/messages', {
+      const res = await fetchWithRetry('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(messageData)
@@ -427,7 +435,7 @@ export default function ChatSystem() {
   const startDM = async (employeeId: number) => {
     if (!currentUser) return;
     try {
-      const res = await fetch('/api/messages/dm', {
+      const res = await fetchWithRetry('/api/messages/dm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user1_id: currentUser.id, user2_id: employeeId })
@@ -533,7 +541,7 @@ export default function ChatSystem() {
             <div className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600">
-                  {activeChat.type === 'channel' ? <Hash size={20} /> : <User size={20} />}
+                  {activeChat.type === 'channel' ? <Hash size={20} /> : <UserIcon size={20} />}
                 </div>
                 <div>
                   <h3 className="font-black text-slate-900 uppercase tracking-tight">

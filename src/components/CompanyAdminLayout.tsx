@@ -5,8 +5,9 @@ import { ArrowLeft, LogOut } from 'lucide-react';
 export default function CompanyAdminLayout() {
   const navigate = useNavigate();
   const companyAdminData = localStorage.getItem('companyAdmin');
+  const company = companyAdminData ? JSON.parse(companyAdminData) : null;
 
-  if (!companyAdminData) {
+  if (!company) {
     return <Navigate to="/company-admin" replace />;
   }
 
@@ -38,12 +39,12 @@ export default function CompanyAdminLayout() {
               EXIT TO SITE
             </button>
             <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
-              A
+              {company.name?.[0] || 'A'}
             </div>
           </div>
         </header>
         <main className="flex-1 overflow-y-auto p-8">
-          <Outlet />
+          <Outlet context={{ company }} />
         </main>
       </div>
     </div>

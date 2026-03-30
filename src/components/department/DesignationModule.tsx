@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, Download, FileSpreadsheet, FileText, XCircle } fro
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
 
 interface Department {
   id: number;
@@ -40,7 +41,7 @@ export default function DesignationModule({ companyId }: DesignationModuleProps)
   const fetchDesignations = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/designations?company_id=${companyId}`);
+      const res = await fetchWithRetry(`/api/designations?company_id=${companyId}`);
       if (res.ok) {
         const data = await res.json();
         setDesignations(data);
@@ -54,7 +55,7 @@ export default function DesignationModule({ companyId }: DesignationModuleProps)
 
   const fetchDepartments = useCallback(async () => {
     try {
-      const res = await fetch(`/api/departments?company_id=${companyId}`);
+      const res = await fetchWithRetry(`/api/departments?company_id=${companyId}`);
       if (res.ok) {
         const data = await res.json();
         setDepartments(data);
@@ -90,7 +91,7 @@ export default function DesignationModule({ companyId }: DesignationModuleProps)
         company_id: companyId
       };
 
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -129,7 +130,7 @@ export default function DesignationModule({ companyId }: DesignationModuleProps)
     if (!deleteConfirmId) return;
     
     try {
-      const res = await fetch(`/api/designations/${deleteConfirmId}`, {
+      const res = await fetchWithRetry(`/api/designations/${deleteConfirmId}`, {
         method: 'DELETE'
       });
       

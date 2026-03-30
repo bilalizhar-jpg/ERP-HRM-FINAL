@@ -33,6 +33,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 const employeeStats = [
   { id: 1, name: 'John Doe', department: 'Engineering', activeTime: '7h 45m', productivity: 92, status: 'Active', idleTime: '15m' },
@@ -82,7 +83,7 @@ export default function AdminMonitoringDashboard() {
   const fetchSettings = useCallback(async () => {
     if (!companyId) return;
     try {
-      const response = await fetch(`/api/monitoring/company-settings/${companyId}`);
+      const response = await fetchWithRetry(`/api/monitoring/company-settings/${companyId}`);
       if (response.ok) {
         const data = await response.json();
         setSettings(data);
@@ -95,7 +96,7 @@ export default function AdminMonitoringDashboard() {
   const fetchClassifications = useCallback(async () => {
     if (!companyId) return;
     try {
-      const response = await fetch(`/api/monitoring/classifications/${companyId}`);
+      const response = await fetchWithRetry(`/api/monitoring/classifications/${companyId}`);
       if (response.ok) {
         const data = await response.json();
         setClassifications(data);
@@ -116,7 +117,7 @@ export default function AdminMonitoringDashboard() {
     if (!companyId) return;
     setLoading(true);
     try {
-      const response = await fetch('/api/monitoring/company-settings', {
+      const response = await fetchWithRetry('/api/monitoring/company-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...settings, company_id: companyId })
@@ -134,7 +135,7 @@ export default function AdminMonitoringDashboard() {
   const addRule = async () => {
     if (!newRule.name || !companyId) return;
     try {
-      const response = await fetch('/api/monitoring/classifications', {
+      const response = await fetchWithRetry('/api/monitoring/classifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...newRule, company_id: companyId })
@@ -150,7 +151,7 @@ export default function AdminMonitoringDashboard() {
 
   const updateRule = async (rule: ProductivityRule) => {
     try {
-      const response = await fetch('/api/monitoring/classifications', {
+      const response = await fetchWithRetry('/api/monitoring/classifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...rule, company_id: companyId })
@@ -167,7 +168,7 @@ export default function AdminMonitoringDashboard() {
   const toggleRuleStatus = async (rule: ProductivityRule) => {
     const updatedRule = { ...rule, is_productive: !rule.is_productive };
     try {
-      const response = await fetch('/api/monitoring/classifications', {
+      const response = await fetchWithRetry('/api/monitoring/classifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...updatedRule, company_id: companyId })
@@ -206,7 +207,7 @@ export default function AdminMonitoringDashboard() {
     setLoading(true);
     try {
       for (const rule of defaults) {
-        await fetch('/api/monitoring/classifications', {
+        await fetchWithRetry('/api/monitoring/classifications', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...rule, company_id: companyId })
@@ -222,7 +223,7 @@ export default function AdminMonitoringDashboard() {
 
   const deleteRule = async (id: number) => {
     try {
-      const response = await fetch(`/api/monitoring/classifications/${id}`, {
+      const response = await fetchWithRetry(`/api/monitoring/classifications/${id}`, {
         method: 'DELETE'
       });
       if (response.ok) {

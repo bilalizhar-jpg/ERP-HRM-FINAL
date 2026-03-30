@@ -20,10 +20,12 @@ import {
   DragEndEvent
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+import { User } from '../../types';
 
 import html2canvas from 'html2canvas';
 import { Document, Packer, Paragraph, ImageRun } from 'docx';
 import { saveAs } from 'file-saver';
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
 
 interface EmployeeNode {
   id: number;
@@ -259,8 +261,32 @@ export default function OrgChart() {
   const containerRef = useRef<HTMLDivElement>(null);
   const updateXarrow = useXarrow();
 
-  const user = JSON.parse(localStorage.getItem('employee') || localStorage.getItem('companyAdmin') || localStorage.getItem('superAdmin') || '{}');
-  const companyId = user.company_id || user.id;
+  const [user, setUser] = useState<User | null>(null);
+  const companyId = user?.company_id || user?.id;
+
+  useEffect(() => {
+    const employeeId = localStorage.getItem('employeeId');
+    const companyAdmin = localStorage.getItem('companyAdmin');
+    const superAdmin = localStorage.getItem('superAdmin');
+
+    if (employeeId) {
+      fetchWithRetry(`/api/employees/${employeeId}`)
+        .then(async res => {
+          if (!res.ok) throw new Error(await res.text());
+          return res.json();
+        })
+        .then(data => {
+          if (data.success) {
+            setUser(data.employee);
+          }
+        })
+        .catch(err => console.error("Error fetching employee:", err));
+    } else if (companyAdmin) {
+      setUser(JSON.parse(companyAdmin));
+    } else if (superAdmin) {
+      setUser(JSON.parse(superAdmin));
+    }
+  }, []);
 
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
@@ -279,8 +305,11 @@ export default function OrgChart() {
 
   const fetchAllEmployees = useCallback(() => {
     if (companyId) {
-      fetch(`/api/employees?company_id=${companyId}`)
-        .then(res => res.json())
+      fetchWithRetry(`/api/employees?company_id=${companyId}`)
+        .then(async res => {
+          if (!res.ok) throw new Error(await res.text());
+          return res.json();
+        })
         .then(data => {
           setAllEmployees(data);
         })
@@ -422,8 +451,11 @@ export default function OrgChart() {
 
   const fetchHierarchy = useCallback(() => {
     if (companyId) {
-      fetch(`/api/employees/hierarchy/${companyId}`)
-        .then(res => res.json())
+      fetchWithRetry(`/api/employees/hierarchy/${companyId}`)
+        .then(async res => {
+          if (!res.ok) throw new Error(await res.text());
+          return res.json();
+        })
         .then(data => {
           // Recursive filter for "Bilal Izhar"
           const filterBilal = (nodes: EmployeeNode[]): EmployeeNode[] => {
@@ -489,7 +521,7 @@ export default function OrgChart() {
       }
 
       try {
-        const res = await fetch(`/api/employees/${employeeId}/manager`, {
+        const res = await fetchWithRetry(`/api/employees/${employeeId}/manager`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ manager_id: newManagerId })
@@ -538,7 +570,7 @@ export default function OrgChart() {
   const handleDeleteEmployee = async (id: number) => {
     if (confirm("Are you sure you want to delete this employee? This will remove them from the system.")) {
       try {
-        const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+        const res = await fetchWithRetry(`/api/employees/${id}`, { method: 'DELETE' });
         if (res.ok) fetchHierarchy();
       } catch (err) {
         console.error("Failed to delete employee", err);

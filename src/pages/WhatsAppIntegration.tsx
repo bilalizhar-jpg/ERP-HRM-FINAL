@@ -13,6 +13,7 @@ import {
   Trash2
 } from 'lucide-react';
 import SuperAdminSidebar from '../components/SuperAdminSidebar';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 interface WhatsAppStatus {
   status: 'connected' | 'disconnected' | 'connecting';
@@ -30,7 +31,7 @@ export default function WhatsAppIntegration() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`/api/whatsapp/status?companyId=${SUPER_ADMIN_ID}`);
+      const res = await fetchWithRetry(`/api/whatsapp/status?companyId=${SUPER_ADMIN_ID}`);
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
@@ -49,7 +50,7 @@ export default function WhatsAppIntegration() {
   const handleConnect = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/whatsapp/connect', {
+      const res = await fetchWithRetry('/api/whatsapp/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyId: SUPER_ADMIN_ID })
@@ -72,7 +73,7 @@ export default function WhatsAppIntegration() {
     if (!confirm('Are you sure you want to disconnect WhatsApp?')) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/whatsapp/disconnect', {
+      const res = await fetchWithRetry('/api/whatsapp/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyId: SUPER_ADMIN_ID })
@@ -91,7 +92,7 @@ export default function WhatsAppIntegration() {
     if (!testNumber || !testMessage) return;
     setIsSending(true);
     try {
-      const res = await fetch('/api/whatsapp/send', {
+      const res = await fetchWithRetry('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

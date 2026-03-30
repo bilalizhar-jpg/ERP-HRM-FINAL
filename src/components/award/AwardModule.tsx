@@ -10,6 +10,7 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
 
 interface Award {
   id: number;
@@ -39,9 +40,11 @@ export default function AwardModule() {
 
   const fetchAwards = async () => {
     try {
-      const response = await fetch('/api/awards?company_id=1');
-      const data = await response.json();
-      setAwards(data);
+      const response = await fetchWithRetry('/api/awards?company_id=1');
+      if (response.ok) {
+        const data = await response.json();
+        setAwards(data);
+      }
     } catch (error) {
       console.error('Error fetching awards:', error);
     } finally {
@@ -51,9 +54,11 @@ export default function AwardModule() {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch('/api/employees?company_id=1');
-      const data = await response.json();
-      setEmployees(data);
+      const response = await fetchWithRetry('/api/employees?company_id=1');
+      if (response.ok) {
+        const data = await response.json();
+        setEmployees(data);
+      }
     } catch (error) {
       console.error('Error fetching employees:', error);
     }

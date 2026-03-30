@@ -18,6 +18,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { useOutletContext } from 'react-router-dom';
+import { Employee } from '../types';
 
 interface SalarySlip {
   id: number;
@@ -69,9 +71,10 @@ export default function EmployeePayroll() {
   const [loanDate, setLoanDate] = useState(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
 
-  const employee = JSON.parse(localStorage.getItem('employee') || '{}');
+  const { employee } = useOutletContext<{ employee: Employee | null }>();
 
   const fetchData = useCallback(async () => {
+    if (!employee?.id) return;
     setLoading(true);
     try {
       // Mocking API response with detailed data
@@ -125,11 +128,13 @@ export default function EmployeePayroll() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [employee?.id]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (employee?.id) {
+      fetchData();
+    }
+  }, [fetchData, employee?.id]);
 
   const handleLoanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,7 +174,7 @@ export default function EmployeePayroll() {
     const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
     
     pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`payslip-${employee.name?.replace(/\s+/g, '-').toLowerCase() || 'employee'}-${selectedSlip.month}-${selectedSlip.year}.pdf`);
+    pdf.save(`payslip-${employee?.name?.replace(/\s+/g, '-').toLowerCase() || 'employee'}-${selectedSlip.month}-${selectedSlip.year}.pdf`);
   };
 
   const filteredSlips = slips.filter(s => 
@@ -185,6 +190,10 @@ export default function EmployeePayroll() {
   const filteredCommissions = commissions.filter(c => 
     c.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (!employee) {
+    return <div className="p-10 text-center font-bold text-slate-500">Loading payroll data...</div>;
+  }
 
   return (
     <div className="p-6 lg:p-10 max-w-7xl mx-auto space-y-8">
@@ -502,17 +511,17 @@ export default function EmployeePayroll() {
 
                   <div className="grid grid-cols-2 gap-x-12 gap-y-1 mb-12">
                     {[
-                      { label: 'Employee name', value: employee.name },
+                      { label: 'Employee name', value: employee?.name },
                       { label: 'Month', value: `${selectedSlip.month}, ${selectedSlip.year}` },
-                      { label: 'Position', value: employee.designation || 'Staff' },
+                      { label: 'Position', value: employee?.designation || 'Staff' },
                       { label: 'From', value: `${selectedSlip.year}-${selectedSlip.month}-01` },
-                      { label: 'Contact', value: employee.phone || 'N/A' },
+                      { label: 'Contact', value: employee?.phone || 'N/A' },
                       { label: 'To', value: `${selectedSlip.year}-${selectedSlip.month}-30` },
-                      { label: 'Address', value: employee.address || 'N/A' },
-                      { label: 'Recruitment date', value: employee.joining_date || 'N/A' },
+                      { label: 'Address', value: employee?.address || 'N/A' },
+                      { label: 'Recruitment date', value: employee?.joining_date || 'N/A' },
                       { label: 'Total working hours', value: '160' },
                       { label: 'Worked hours', value: '160' },
-                      { label: 'Staff id', value: employee.employee_id || `#${employee.id}` },
+                      { label: 'Staff id', value: employee?.employee_id || `#${employee?.id}` },
                     ].map((item) => (
                       <div key={item.label} className="flex border-b border-slate-100 py-2">
                         <span className="w-40 text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.label}</span>

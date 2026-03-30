@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import SuperAdminSidebar from '../../components/SuperAdminSidebar';
 import { Edit, Plus, Search, Filter, FileText, X, Check, Trash2, CalendarDays, ArrowRight } from 'lucide-react';
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
 
 type TabType = 'WEEKLY HOLIDAY' | 'HOLIDAY' | 'LEAVE TYPE' | 'LEAVE APPROVAL' | 'LEAVE REPORT';
 
@@ -30,11 +31,11 @@ export default function Leave() {
   const fetchData = async () => {
     try {
       const [whRes, hRes, ltRes, lrRes, empRes] = await Promise.all([
-        fetch('/api/weekly-holidays?company_id=1'),
-        fetch('/api/holidays?company_id=1'),
-        fetch('/api/leave-types?company_id=1'),
-        fetch('/api/leave-requests?company_id=1'),
-        fetch('/api/employees?company_id=1')
+        fetchWithRetry('/api/weekly-holidays?company_id=1'),
+        fetchWithRetry('/api/holidays?company_id=1'),
+        fetchWithRetry('/api/leave-types?company_id=1'),
+        fetchWithRetry('/api/leave-requests?company_id=1'),
+        fetchWithRetry('/api/employees?company_id=1')
       ]);
       const whData: WeeklyHoliday[] = await whRes.json();
       setHolidays(await hRes.json());
@@ -64,7 +65,7 @@ export default function Leave() {
 
   const saveHoliday = async () => {
     try {
-      await fetch('/api/holidays', {
+      await fetchWithRetry('/api/holidays', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ company_id: 1, name: holidayName, date: fromDate, description: '' })
@@ -82,7 +83,7 @@ export default function Leave() {
 
   const saveLeaveType = async () => {
     try {
-      await fetch('/api/leave-types', {
+      await fetchWithRetry('/api/leave-types', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ company_id: 1, name: leaveTypeName, days_allowed: leaveTypeDays })
@@ -105,7 +106,7 @@ export default function Leave() {
   const saveWeeklyHoliday = async () => {
     try {
       for (const day of days) {
-        await fetch('/api/weekly-holidays', {
+        await fetchWithRetry('/api/weekly-holidays', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ company_id: 1, day_of_week: day, is_active: selectedDays.includes(day) })
@@ -120,7 +121,7 @@ export default function Leave() {
 
   const deleteHoliday = async (id: number) => {
     try {
-      await fetch(`/api/holidays/${id}`, { method: 'DELETE' });
+      await fetchWithRetry(`/api/holidays/${id}`, { method: 'DELETE' });
       fetchData();
     } catch (error) {
       console.error('Error deleting holiday:', error);
@@ -129,7 +130,7 @@ export default function Leave() {
 
   const deleteLeaveType = async (id: number) => {
     try {
-      await fetch(`/api/leave-types/${id}`, { method: 'DELETE' });
+      await fetchWithRetry(`/api/leave-types/${id}`, { method: 'DELETE' });
       fetchData();
     } catch (error) {
       console.error('Error deleting leave type:', error);
@@ -138,7 +139,7 @@ export default function Leave() {
 
   const updateLeaveRequestStatus = async (id: number, status: string) => {
     try {
-      await fetch(`/api/leave-requests/${id}`, {
+      await fetchWithRetry(`/api/leave-requests/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })

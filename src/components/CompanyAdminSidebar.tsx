@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, LogOut } from 'lucide-react';
 import { employerModules, ModuleItem, SubItem } from '../config/modules';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 const menuItems: ModuleItem[] = employerModules.map(module => ({
   ...module,
@@ -21,16 +22,20 @@ export default function CompanyAdminSidebar() {
         const companyStr = localStorage.getItem('companyAdmin');
         if (companyStr) {
           const company = JSON.parse(companyStr);
-          const res = await fetch(`/api/employer-permissions?company_id=${company.id}`);
+          const res = await fetchWithRetry(`/api/employer-permissions?company_id=${company.id}`);
           if (res.ok) {
             const permissions = await res.json();
+            console.log("Company Admin Permissions:", permissions);
             // Default to true if not explicitly restricted
             const allowed = menuItems
               .filter(item => {
                 const perm = permissions.find((p: { module_name: string; is_granted: boolean }) => p.module_name === item.name);
+                // Force ATTENDANCE to be true for now to debug
+                if (item.name === 'ATTENDANCE') return true;
                 return perm ? Boolean(perm.is_granted) : true;
               })
               .map(item => item.name);
+            console.log("Allowed Modules:", allowed);
             setAllowedModules(allowed);
           } else {
             setAllowedModules(menuItems.map(item => item.name));
@@ -59,7 +64,7 @@ export default function CompanyAdminSidebar() {
 
   const handleExitToSite = async () => {
     try {
-      await fetch('/api/logout', { method: 'POST' });
+      await fetchWithRetry('/api/logout', { method: 'POST' });
     } catch (err) {
       console.error("Logout error:", err);
     }

@@ -1,6 +1,7 @@
 import express from 'express';
 import { RowDataPacket } from 'mysql2';
 import db from '../db';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 const router = express.Router();
 
@@ -8,7 +9,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { company_id } = req.query;
-    let query = 'SELECT id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields, created_at FROM employees';
+    let query = 'SELECT id, company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields, created_at FROM employees';
     const params: (string | number)[] = [];
     
     if (company_id) {
@@ -22,6 +23,26 @@ router.get('/', async (req, res) => {
     res.json(rows);
   } catch (error) {
     console.error('Error fetching employees:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get single employee by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await db.query(
+      'SELECT id, company_id, name, email, password, employee_id, department, designation, status, mobile_no, date_of_birth, joining_date, blood_group, location, city, employee_type, national_id, salary, tax_deduction, bank_name, bank_account_no, mode_of_payment, username, profile_picture, custom_fields, created_at FROM employees WHERE id = ?',
+      [id]
+    ) as [RowDataPacket[], unknown];
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    res.json({ success: true, employee: rows[0] });
+  } catch (error) {
+    console.error('Error fetching employee:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -60,8 +81,8 @@ router.post('/', async (req, res) => {
         message = message.replace(/{{username}}/g, username || '');
         message = message.replace(/{{password}}/g, passwordToStore);
 
-        // Use fetch to call our own API to handle rate limiting and Baileys logic
-        fetch(`http://127.0.0.1:3000/api/whatsapp/send`, {
+        // Use fetchWithRetry to call our own API to handle rate limiting and Baileys logic
+        fetchWithRetry(`http://localhost:3000/api/whatsapp/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

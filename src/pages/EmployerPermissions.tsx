@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Shield, Search, Save, Loader2 } from 'lucide-react';
 import SuperAdminSidebar from '../components/SuperAdminSidebar';
 import { employerModules } from '../config/modules';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 interface Company {
   id: number;
@@ -31,8 +32,8 @@ export default function EmployerPermissions() {
     const fetchData = async () => {
       try {
         const [compRes, permRes] = await Promise.all([
-          fetch('/api/companies'),
-          fetch('/api/employer-permissions')
+          fetchWithRetry('/api/companies'),
+          fetchWithRetry('/api/employer-permissions')
         ]);
 
         if (compRes.ok && permRes.ok) {
@@ -105,7 +106,7 @@ export default function EmployerPermissions() {
         });
       });
 
-      const res = await fetch('/api/employer-permissions', {
+      const res = await fetchWithRetry('/api/employer-permissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ permissions: payload })

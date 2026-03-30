@@ -86,6 +86,7 @@ async function startServer() {
 
   app.use("/api", (req, res, next) => {
     console.log(`[${new Date().toISOString()}] API request: ${req.method} ${req.url}`);
+    console.log("Query parameters:", req.query);
     next();
   });
 
@@ -598,6 +599,70 @@ app.use("/uploads", express.static(join(process.cwd(), "uploads")));
     }
   });
 
+  // Shifts API
+  app.get("/api/shifts", async (req, res) => {
+    let connection;
+    try {
+      const { company_id } = req.query;
+      connection = await db.getConnection();
+      const [rows] = await connection.query("SELECT * FROM shifts WHERE company_id = ? ORDER BY created_at DESC", [company_id]);
+      res.json(rows);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.post("/api/shifts", async (req, res) => {
+    let connection;
+    try {
+      const { company_id, name, type, start_time, end_time, break_duration, grace_period, description } = req.body;
+      connection = await db.getConnection();
+      await connection.query(
+        "INSERT INTO shifts (company_id, name, type, start_time, end_time, break_duration, grace_period, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [company_id, name, type, start_time, end_time, break_duration, grace_period, description]
+      );
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.put("/api/shifts/:id", async (req, res) => {
+    let connection;
+    try {
+      const { id } = req.params;
+      const { name, type, start_time, end_time, break_duration, grace_period, description, status } = req.body;
+      connection = await db.getConnection();
+      await connection.query(
+        "UPDATE shifts SET name = ?, type = ?, start_time = ?, end_time = ?, break_duration = ?, grace_period = ?, description = ?, status = ? WHERE id = ?",
+        [name, type, start_time, end_time, break_duration, grace_period, description, status, id]
+      );
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.delete("/api/shifts/:id", async (req, res) => {
+    let connection;
+    try {
+      const { id } = req.params;
+      connection = await db.getConnection();
+      await connection.query("DELETE FROM shifts WHERE id = ?", [id]);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
   // Attendance API
   app.get("/api/attendance", async (req, res) => {
     let connection;
@@ -606,10 +671,12 @@ app.use("/uploads", express.static(join(process.cwd(), "uploads")));
       connection = await db.getConnection();
       
       let query = `
-        SELECT a.*, 
+        SELECT a.id, a.company_id, a.employee_id, a.shift_id, 
+               DATE_FORMAT(a.date, '%Y-%m-%d') as date,
                COALESCE(a.check_in, DATE_FORMAT(a.check_in_time, '%H:%i')) as check_in,
                COALESCE(a.check_out, DATE_FORMAT(a.check_out_time, '%H:%i')) as check_out,
                COALESCE(a.break_time, a.break_duration_minutes) as break_time,
+               a.status, a.is_late, a.working_hours, a.overtime_hours,
                e.name as employee_name, e.employee_id as emp_code 
         FROM attendance a
         JOIN employees e ON a.employee_id = e.id
@@ -671,204 +738,7 @@ app.use("/uploads", express.static(join(process.cwd(), "uploads")));
 
 
   // Employee Attendance API
-  app.post("/api/employee/attendance/action", async (req, res) => {
-    let connection;
-    try {
-      const { employee_id, company_id, action, lat, long, selfie_url } = req.body;
-      console.log(`[Attendance API] Action: ${action}, Employee: ${employee_id}, Company: ${company_id}`);
-      
-      if (!employee_id || !company_id || !action) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-
-      connection = await db.getConnection();
-      const date = new Date().toISOString().split('T')[0];
-      const now = new Date();
-
-      const [existing] = await connection.query(
-        "SELECT * FROM attendance WHERE employee_id = ? AND date = ? ORDER BY id DESC LIMIT 1",
-        [employee_id, date]
-      ) as [AttendanceRecord[], unknown];
-
-      console.log(`[Attendance API] Existing record status: ${existing.length > 0 ? existing[0].status : 'None'}`);
-
-      if (action === 'check-in') {
-        if (existing.length > 0 && existing[0].status !== 'Checked-Out') {
-          return res.status(400).json({ error: "Already checked in. Please check out first." });
-        }
-
-        // Fetch employee's shift
-        const [empRows] = await connection.query(
-          "SELECT e.shift_id, e.mobile_no, e.name, s.start_time, s.grace_period FROM employees e LEFT JOIN shifts s ON e.shift_id = s.id WHERE e.id = ?",
-          [employee_id]
-        ) as [Record<string, unknown>[], unknown];
-
-        let isLate = false;
-        if (empRows.length > 0) {
-          const emp = empRows[0];
-          let shiftStartTime = emp.start_time;
-          let gracePeriod = emp.grace_period || 0;
-
-          // If no shift assigned, try to find the first active shift for the company
-          if (!shiftStartTime) {
-             const [activeShifts] = await connection.query(
-               "SELECT start_time, grace_period FROM shifts WHERE status = 'Active' LIMIT 1"
-             ) as [Record<string, unknown>[], unknown];
-             if (activeShifts.length > 0) {
-               shiftStartTime = activeShifts[0].start_time;
-               gracePeriod = activeShifts[0].grace_period || 0;
-             }
-          }
-
-          if (shiftStartTime) {
-            const [sHour, sMin] = shiftStartTime.split(':').map(Number);
-            const shiftDate = new Date();
-            shiftDate.setHours(sHour, sMin, 0, 0);
-            
-            const lateThreshold = new Date(shiftDate.getTime() + gracePeriod * 60000);
-            if (now > lateThreshold) {
-              isLate = true;
-            }
-          }
-        }
-
-        await connection.query(
-          `INSERT INTO attendance (company_id, employee_id, date, check_in_time, check_in_lat, check_in_long, selfie_url, status, is_late) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [company_id, employee_id, date, now, lat, long, selfie_url, 'Present', isLate]
-        );
-
-        // Send WhatsApp if late
-        if (isLate && empRows.length > 0 && empRows[0].mobile_no) {
-           const emp = empRows[0] as Record<string, unknown>;
-           const message = `Hello ${emp.name}, you are marked late for your shift today. Please ensure timely arrival.`;
-           
-           // Try to send if session exists
-           const sock = sessions.get(Number(company_id));
-           if (sock) {
-             let formattedNumber = String(emp.mobile_no).replace(/\D/g, "");
-             if (!formattedNumber.endsWith("@s.whatsapp.net")) {
-               formattedNumber += "@s.whatsapp.net";
-             }
-             try {
-               const sentMsg = await sock.sendMessage(formattedNumber, { text: message });
-               await connection.query(
-                 "INSERT INTO whatsapp_messages (company_id, to_number, message, status, response_log) VALUES (?, ?, ?, 'sent', ?)",
-                 [company_id, emp.mobile_no, message, JSON.stringify(sentMsg)]
-               );
-             } catch (err) {
-               console.error("[WhatsApp] Failed to send late notification:", err);
-               await connection.query(
-                 "INSERT INTO whatsapp_messages (company_id, to_number, message, status) VALUES (?, ?, ?, 'failed')",
-                 [company_id, emp.mobile_no, message]
-               );
-             }
-           } else {
-             // Just log it in the table as pending
-             await connection.query(
-               "INSERT INTO whatsapp_messages (company_id, to_number, message, status) VALUES (?, ?, ?, 'pending')",
-               [company_id, emp.mobile_no, message]
-             );
-           }
-        }
-      } else if (action === 'check-out') {
-        if (existing.length === 0 || existing[0].status === 'Checked-Out') {
-          return res.status(400).json({ error: "No active check-in found" });
-        }
-        const record = existing[0];
-        const checkIn = record.check_in_time ? new Date(record.check_in_time) : new Date();
-        const breakStart = record.break_start_time ? new Date(record.break_start_time) : null;
-        
-        let breakDuration = record.break_duration_minutes || 0;
-        let finalBreakEnd = record.break_end_time ? new Date(record.break_end_time) : null;
-        
-        if (record.status === 'On Break' && breakStart) {
-          // If still on break, end it now
-          breakDuration += Math.round((now.getTime() - breakStart.getTime()) / 60000);
-          finalBreakEnd = now;
-        }
-        
-        const totalDurationMs = now.getTime() - checkIn.getTime();
-        const totalDurationMinutes = Math.round(totalDurationMs / 60000);
-        const workingHours = Math.max(0, (totalDurationMinutes - breakDuration) / 60);
-        
-        await connection.query(
-          "UPDATE attendance SET check_out_time = ?, check_out_lat = ?, check_out_long = ?, status = 'Checked-Out', working_hours = ?, break_duration_minutes = ?, break_end_time = ? WHERE id = ?",
-          [now, lat, long, workingHours.toFixed(2), breakDuration, finalBreakEnd || record.break_end_time, record.id]
-        );
-      } else if (action === 'break-start') {
-        if (existing.length === 0 || existing[0].status !== 'Present') {
-          return res.status(400).json({ error: "Must be checked in and not on break" });
-        }
-        await connection.query("UPDATE attendance SET break_start_time = ?, status = 'On Break' WHERE id = ?", [now, existing[0].id]);
-      } else if (action === 'break-end') {
-        if (existing.length === 0 || existing[0].status !== 'On Break') {
-          return res.status(400).json({ error: "Not currently on break" });
-        }
-        const record = existing[0];
-        const breakStart = record.break_start_time ? new Date(record.break_start_time) : null;
-        let additionalBreak = 0;
-        if (breakStart) {
-          additionalBreak = Math.round((now.getTime() - breakStart.getTime()) / 60000);
-        }
-        await connection.query(
-          "UPDATE attendance SET break_end_time = ?, status = 'Present', break_duration_minutes = COALESCE(break_duration_minutes, 0) + ? WHERE id = ?", 
-          [now, additionalBreak, record.id]
-        );
-      }
-
-      res.json({ success: true });
-    } catch (error: unknown) {
-      const err = error as Error;
-      console.error("Error performing attendance action:", err);
-      res.status(500).json({ error: err.message });
-    } finally {
-      if (connection) connection.release();
-    }
-  });
-
-  app.get("/api/employee/attendance/stats", async (req, res) => {
-    let connection;
-    try {
-      const { employee_id } = req.query;
-      if (!employee_id) {
-        return res.status(400).json({ error: "employee_id is required" });
-      }
-      connection = await db.getConnection();
-      const [rows] = await connection.query(
-        "SELECT *, DATE_FORMAT(date, '%Y-%m-%d') as date_str FROM attendance WHERE employee_id = ? AND date >= DATE_SUB(NOW(), INTERVAL 30 DAY) ORDER BY id DESC",
-        [employee_id]
-      ) as [AttendanceRecord[], unknown];
-      
-      const data = Array.isArray(rows) ? rows : [];
-      
-      const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
-      
-      const dailyHours = data
-        .filter(r => (r as AttendanceRecord & { date_str: string }).date_str === todayStr)
-        .reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);
-      
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(now.getDate() - 7);
-      const weeklyHours = data
-        .filter(r => new Date(r.date) >= oneWeekAgo)
-        .reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);
-        
-      const monthlyHours = data.reduce((acc, curr) => acc + parseFloat(String(curr.working_hours || 0)), 0);
-      
-      const lateCount = data.filter((r: AttendanceRecord) => r.is_late).length;
-      const dailyAttendance = data.slice(0, 7); // Last 7 days
-      
-      res.json({ dailyHours, weeklyHours, monthlyHours, lateCount, dailyAttendance });
-    } catch (error: unknown) {
-      const err = error as Error;
-      console.error("Error fetching attendance stats:", err);
-      res.status(500).json({ error: err.message });
-    } finally {
-      if (connection) connection.release();
-    }
-  });
+  // Attendance module removed
 
   interface Employee {
     id: number;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Shield, MessageSquare, ArrowRight, Loader2 } from 'lucide-react';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 export default function GuestJoin() {
   const { token } = useParams();
@@ -13,7 +14,7 @@ export default function GuestJoin() {
   useEffect(() => {
     const verifyToken = async () => {
       try {
-        const res = await fetch(`/api/messages/verify-guest/${token}`);
+        const res = await fetchWithRetry(`/api/messages/verify-guest/${token}`);
         const data = await res.json();
         if (data.success) {
           setInvite(data.invite);

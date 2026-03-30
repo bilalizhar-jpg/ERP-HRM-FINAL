@@ -104,11 +104,12 @@ export default function EmployeeMonitoring() {
 
   // Real-time tracking state
   const [isTracking, setIsTracking] = useState(false);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
   const [sessionKeys, setSessionKeys] = useState(0);
   const [sessionClicks, setSessionClicks] = useState(0);
-  const [realScreenshots, setRealScreenshots] = useState<any[]>([]);
-  const [realInputData, setRealInputData] = useState<any[]>([]);
-  const [realLocationData, setRealLocationData] = useState<any[]>([]);
+  const [realScreenshots, setRealScreenshots] = useState<{ id: number; time: string; app: string; url: string }[]>([]);
+  const [realInputData, setRealInputData] = useState<{ time: string; keystrokes: number; clicks: number }[]>([]);
+  const [realLocationData, setRealLocationData] = useState<{ id: number; time: string; location: string; ip: string; status: string }[]>([]);
   
   const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -148,9 +149,10 @@ export default function EmployeeMonitoring() {
       stream.getVideoTracks()[0].onended = () => {
         stopTracking();
       };
+      setTrackingError(null);
     } catch (err) {
       console.error("Error sharing screen:", err);
-      alert("Screen sharing permission is required to start tracking.");
+      setTrackingError("Screen sharing permission is required to start tracking. Please ensure your browser allows screen sharing for this site.");
     }
   };
 
@@ -263,6 +265,13 @@ export default function EmployeeMonitoring() {
           </button>
         </div>
       </div>
+
+      {trackingError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 mb-8 flex items-center gap-3 shadow-sm">
+          <AlertCircle size={20} className="shrink-0" />
+          <p className="text-sm font-medium">{trackingError}</p>
+        </div>
+      )}
 
       {/* Privacy & Transparency Banner */}
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-8 flex items-start gap-4 shadow-sm">

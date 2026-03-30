@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import SuperAdminSidebar from '../components/SuperAdminSidebar';
 import { Plus, Search, Maximize2, Trash2 } from 'lucide-react';
 import NoticeModal from '../components/NoticeModal';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 interface Notice {
   id: number;
@@ -26,20 +27,30 @@ export default function NoticeBoard({ isAdmin = true }: { isAdmin?: boolean }) {
 
   useEffect(() => {
     const companyAdmin = localStorage.getItem('companyAdmin');
-    const employee = localStorage.getItem('employee');
+    const employeeId = localStorage.getItem('employeeId');
     if (companyAdmin) {
       const company = JSON.parse(companyAdmin);
       setCompanyId(Number(company.id));
-    } else if (employee) {
-      const emp = JSON.parse(employee);
-      setCompanyId(Number(emp.company_id));
+    } else if (employeeId) {
+      // Fetch employee to get company_id
+      fetchWithRetry(`/api/employees/${employeeId}`)
+        .then(async res => {
+          if (!res.ok) throw new Error(await res.text());
+          return res.json();
+        })
+        .then(data => {
+          if (data.success) {
+            setCompanyId(Number(data.employee.company_id));
+          }
+        })
+        .catch(err => console.error("Error fetching employee for notice board:", err));
     }
   }, []);
 
   const fetchNotices = useCallback(async () => {
     if (!companyId) return;
     try {
-      const res = await fetch(`/api/notices?company_id=${companyId}`);
+      const res = await fetchWithRetry(`/api/notices?company_id=${companyId}`);
       if (res.ok) {
         const data: Notice[] = await res.json();
         setNotices(data);
@@ -56,7 +67,7 @@ export default function NoticeBoard({ isAdmin = true }: { isAdmin?: boolean }) {
   const handleSaveNotice = async (notice: Omit<Notice, 'id' | 'company_id' | 'created_at'>) => {
     if (!companyId) return;
     try {
-      const res = await fetch('/api/notices', {
+      const res = await fetchWithRetry('/api/notices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...notice, company_id: companyId })
@@ -75,7 +86,7 @@ export default function NoticeBoard({ isAdmin = true }: { isAdmin?: boolean }) {
   const handleDeleteNotice = async (id: number) => {
     if (!confirm('Are you sure you want to delete this notice?')) return;
     try {
-      const res = await fetch(`/api/notices/${id}`, { method: 'DELETE' });
+      const res = await fetchWithRetry(`/api/notices/${id}`, { method: 'DELETE' });
       if (res.ok) {
         fetchNotices();
       } else {

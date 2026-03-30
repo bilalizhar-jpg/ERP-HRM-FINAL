@@ -174,6 +174,30 @@ export async function initializeDatabase(connection: Connection) {
     // Column might already exist
   }
 
+  // Alter shifts table to add missing columns
+  try {
+    const [columns] = await connection.query('SHOW COLUMNS FROM shifts') as [Record<string, unknown>[], unknown];
+    const columnNames = columns.map(c => c.Field as string);
+    if (!columnNames.includes('company_id')) {
+      await connection.query("ALTER TABLE shifts ADD COLUMN company_id INT");
+      await connection.query("ALTER TABLE shifts ADD CONSTRAINT fk_shift_company FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE");
+    }
+    if (!columnNames.includes('type')) {
+      await connection.query("ALTER TABLE shifts ADD COLUMN type VARCHAR(50) DEFAULT 'Fixed'");
+    }
+    if (!columnNames.includes('break_duration')) {
+      await connection.query("ALTER TABLE shifts ADD COLUMN break_duration INT DEFAULT 60");
+    }
+    if (!columnNames.includes('description')) {
+      await connection.query("ALTER TABLE shifts ADD COLUMN description TEXT");
+    }
+    if (!columnNames.includes('created_at')) {
+      await connection.query("ALTER TABLE shifts ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+    }
+  } catch (err) {
+    console.error('Error adding missing columns to shifts table:', err);
+  }
+
   // Create invoices table
   await connection.query(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -324,7 +348,8 @@ export async function initializeDatabase(connection: Connection) {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
       FOREIGN KEY (manager_id) REFERENCES employees(id) ON DELETE SET NULL,
-      FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL
+      FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL,
+      UNIQUE KEY unique_attendance (company_id, employee_id, date)
     )
   `);
 
@@ -426,7 +451,7 @@ export async function initializeDatabase(connection: Connection) {
       check_out_lat DECIMAL(10, 8),
       check_out_long DECIMAL(11, 8),
       selfie_url LONGTEXT,
-      status ENUM('Present', 'Absent', 'Leave', 'Half Day', 'On Break', 'Checked-Out') DEFAULT 'Checked-Out',
+      status ENUM('Present', 'Absent', 'On Leave', 'Half Day', 'On Break', 'Checked-Out', 'Leave') DEFAULT 'Checked-Out',
       is_late BOOLEAN DEFAULT FALSE,
       working_hours DECIMAL(5,2) DEFAULT 0,
       break_duration_minutes INT DEFAULT 0,
@@ -434,9 +459,34 @@ export async function initializeDatabase(connection: Connection) {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
       FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-      FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL
+      FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL,
+      UNIQUE KEY unique_attendance (company_id, employee_id, date)
     )
   `);
+
+  // Ensure status column is up to date
+  try {
+    await connection.query(`
+      ALTER TABLE attendance 
+      MODIFY COLUMN status ENUM('Present', 'Absent', 'On Leave', 'Half Day', 'On Break', 'Checked-Out', 'Leave') DEFAULT 'Checked-Out'
+    `);
+  } catch { /* Ignore */ }
+
+  // Ensure unique key is added
+  try {
+    await connection.query(`
+      ALTER TABLE attendance 
+      ADD UNIQUE KEY unique_attendance (company_id, employee_id, date)
+    `);
+  } catch { /* Ignore */ }
+
+  // Ensure unique key is added
+  try {
+    await connection.query(`
+      ALTER TABLE attendance 
+      ADD UNIQUE KEY unique_attendance (company_id, employee_id, date)
+    `);
+  } catch { /* Ignore */ }
 
   // Remove unique constraint if it exists to allow multi check-ins
   try {

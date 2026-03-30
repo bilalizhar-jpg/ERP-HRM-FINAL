@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Shield, Eye, EyeOff, User, Lock, ArrowLeft } from 'lucide-react';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 export default function EmployeeLogin() {
   const [username, setUsername] = useState('');
@@ -10,38 +11,27 @@ export default function EmployeeLogin() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const employeeData = localStorage.getItem('employee');
-    if (employeeData) {
+    const employeeId = localStorage.getItem('employeeId');
+    if (employeeId) {
       navigate('/employee/dashboard');
     }
   }, [navigate]);
 
-  const handleLogin = async (e?: React.FormEvent, retryCount = 0) => {
-    if (e) e.preventDefault();
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch('/api/employee/login', {
+      const res = await fetchWithRetry('/api/employee/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
       
-      let data;
-      const text = await res.text();
-      try {
-        data = JSON.parse(text);
-      } catch {
-        if (text.includes("Rate exceeded") && retryCount < 3) {
-          console.warn(`Rate exceeded, retrying in ${1000 * (retryCount + 1)}ms...`);
-          setTimeout(() => handleLogin(undefined, retryCount + 1), 1000 * (retryCount + 1));
-          return;
-        }
-        throw new Error(text || res.statusText);
-      }
+      const data = await res.json();
 
       if (res.ok && data.success) {
-        // Store employee info in localStorage or context
-        localStorage.setItem('employee', JSON.stringify(data.employee));
+        // Store only employee ID in localStorage
+        localStorage.setItem('employeeId', data.employee.id.toString());
         navigate('/employee/dashboard');
       } else {
         alert(data.message || "Invalid credentials");
@@ -50,11 +40,7 @@ export default function EmployeeLogin() {
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Login error:", err);
-      if (err.message.includes("Rate exceeded")) {
-        alert("Too many login attempts. Please wait a moment and try again.");
-      } else {
-        alert(err.message || "Error logging in");
-      }
+      alert(err.message || "Error logging in");
       setLoading(false);
     }
   };

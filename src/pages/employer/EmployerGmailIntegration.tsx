@@ -10,6 +10,7 @@ import {
   Save,
   Loader2
 } from 'lucide-react';
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
 
 interface SmtpSettings {
   host: string;
@@ -51,7 +52,7 @@ export default function EmployerGmailIntegration() {
 
   const fetchStatus = async (id: string) => {
     try {
-      const res = await fetch(`/api/gmail/status?companyId=${id}`);
+      const res = await fetchWithRetry(`/api/gmail/status?companyId=${id}`);
       if (res.ok) {
         const data = await res.json();
         setGmailStatus(data.connected ? 'connected' : 'disconnected');
@@ -65,7 +66,7 @@ export default function EmployerGmailIntegration() {
 
   const fetchSmtpSettings = async (id: string) => {
     try {
-      const res = await fetch(`/api/smtp/settings?companyId=${id}`);
+      const res = await fetchWithRetry(`/api/smtp/settings?companyId=${id}`);
       if (res.ok) {
         const data = await res.json();
         if (data) {
@@ -80,7 +81,7 @@ export default function EmployerGmailIntegration() {
   const handleGmailConnect = async () => {
     if (!companyId) return;
     try {
-      const res = await fetch(`/api/gmail/auth-url?companyId=${companyId}&source=employer`);
+      const res = await fetchWithRetry(`/api/gmail/auth-url?companyId=${companyId}&source=employer`);
       if (res.ok) {
         const { url } = await res.json();
         window.location.href = url;
@@ -94,7 +95,7 @@ export default function EmployerGmailIntegration() {
     if (!companyId) return;
     if (!confirm('Are you sure you want to disconnect Gmail?')) return;
     try {
-      const res = await fetch('/api/gmail/disconnect', {
+      const res = await fetchWithRetry('/api/gmail/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyId })
@@ -111,7 +112,7 @@ export default function EmployerGmailIntegration() {
     if (!companyId) return;
     setIsSavingSmtp(true);
     try {
-      const res = await fetch('/api/smtp/settings', {
+      const res = await fetchWithRetry('/api/smtp/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -135,7 +136,7 @@ export default function EmployerGmailIntegration() {
   const handleTestSmtp = async () => {
     setIsTestingSmtp(true);
     try {
-      const res = await fetch('/api/smtp/send-test', {
+      const res = await fetchWithRetry('/api/smtp/send-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(smtpSettings)

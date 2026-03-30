@@ -13,6 +13,9 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useOutletContext } from 'react-router-dom';
+import { Employee } from '../types';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 interface Leave {
   id: number;
@@ -54,11 +57,16 @@ export default function EmployeeLeaves() {
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const employee = JSON.parse(localStorage.getItem('employee') || '{}');
+  const { employee } = useOutletContext<{ employee: Employee | null }>();
 
   const fetchLeaves = async () => {
+    if (!employee?.id) return;
     try {
-      const response = await fetch(`/api/employee/leaves?employee_id=${employee.id}`);
+      const response = await fetchWithRetry(`/api/employee/leaves?employee_id=${employee?.id}`);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to fetch leaves: ${response.status} ${text}`);
+      }
       const data = await response.json();
       if (data.leaves) {
         setLeaves(data.leaves);
@@ -70,8 +78,13 @@ export default function EmployeeLeaves() {
   };
 
   const fetchLeaveTypes = async () => {
+    if (!employee?.company_id) return;
     try {
-      const response = await fetch(`/api/leave-types?company_id=${employee.company_id}`);
+      const response = await fetchWithRetry(`/api/leave-types?company_id=${employee?.company_id}`);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Failed to fetch leave types: ${response.status} ${text}`);
+      }
       const data = await response.json();
       if (Array.isArray(data)) {
         setLeaveTypes(data);
@@ -86,7 +99,7 @@ export default function EmployeeLeaves() {
 
   useEffect(() => {
     const init = async () => {
-      if (employee.id) {
+      if (employee?.id) {
         setLoading(true);
         await Promise.all([fetchLeaves(), fetchLeaveTypes()]);
         setLoading(false);
@@ -94,7 +107,7 @@ export default function EmployeeLeaves() {
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employee.id]);
+  }, [employee?.id]);
 
   const calculateDays = (start: string, end: string) => {
     if (!start || !end) return 0;
@@ -111,12 +124,12 @@ export default function EmployeeLeaves() {
     const totalDays = calculateDays(startDate, endDate);
 
     try {
-      const response = await fetch('/api/employee/leaves', {
+      const response = await fetchWithRetry('/api/employee/leaves', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          company_id: employee.company_id,
-          employee_id: employee.id,
+          company_id: employee?.company_id,
+          employee_id: employee?.id,
           leave_type: leaveType,
           start_date: startDate,
           end_date: endDate,

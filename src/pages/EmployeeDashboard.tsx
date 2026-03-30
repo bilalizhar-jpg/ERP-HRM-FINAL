@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { 
   Clock, Calendar, Coffee, FileText, 
   AlertCircle, Plus, 
@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, differenceInDays } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Employee } from '../types';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 interface AttendanceRecord {
   id: number;
@@ -91,13 +93,19 @@ export default function EmployeeDashboard() {
     end_date: format(new Date(), 'yyyy-MM-dd'), 
     reason: '' 
   });
-  const employee = JSON.parse(localStorage.getItem('employee') || '{}');
+  const { employee } = useOutletContext<{ employee: Employee | null }>();
   
 
   const fetchDashboardData = useCallback(async () => {
-    if (!employee.id) return;
+    if (!employee?.id) {
+      console.log("Employee ID missing, skipping fetch");
+      return;
+    }
+    console.log("Fetching dashboard data for:", employee?.id, employee?.company_id);
     try {
-      const res = await fetch(`/api/employee/dashboard/stats?employee_id=${employee.id}&company_id=${employee.company_id}`, {
+      const url = `/api/employee/dashboard/stats?employee_id=${employee?.id}&company_id=${employee?.company_id}`;
+      console.log("Fetching URL:", url);
+      const res = await fetchWithRetry(url, {
         cache: 'no-store',
         headers: {
           'Pragma': 'no-cache',
@@ -107,23 +115,24 @@ export default function EmployeeDashboard() {
       if (res.ok) {
         const data = await res.json();
         setStats(data);
+      } else {
+        console.error("Fetch failed with status:", res.status);
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
     }
-  }, [employee.id, employee.company_id]);
+  }, [employee?.id, employee?.company_id]);
 
   useEffect(() => {
-    if (!employee.id) {
-      navigate('/employee/login');
+    if (!employee?.id) {
       return;
     }
     fetchDashboardData();
     const interval = setInterval(fetchDashboardData, 60000); // Refresh every minute
     return () => clearInterval(interval);
-  }, [employee.id, navigate, fetchDashboardData]);
+  }, [employee?.id, navigate, fetchDashboardData]);
 
   const handleAddNote = async () => {
     if (!newNote.title || !newNote.content) return;
@@ -131,11 +140,11 @@ export default function EmployeeDashboard() {
       const url = editingNoteId ? `/api/employee/notes/${editingNoteId}` : '/api/employee/notes';
       const method = editingNoteId ? 'PUT' : 'POST';
       
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          employee_id: employee.id,
+          employee_id: employee?.id,
           title: newNote.title,
           content: newNote.content,
           date: format(new Date(), 'yyyy-MM-dd')
@@ -155,7 +164,7 @@ export default function EmployeeDashboard() {
   const handleDeleteNote = async (id: number) => {
     if (!window.confirm('Are you sure you want to delete this note?')) return;
     try {
-      const res = await fetch(`/api/employee/notes/${id}`, {
+      const res = await fetchWithRetry(`/api/employee/notes/${id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -176,12 +185,12 @@ export default function EmployeeDashboard() {
     if (!newLeave.reason) return;
     const totalDays = differenceInDays(new Date(newLeave.end_date), new Date(newLeave.start_date)) + 1;
     try {
-      const res = await fetch('/api/employee/leaves', {
+      const res = await fetchWithRetry('/api/employee/leaves', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          company_id: employee.company_id,
-          employee_id: employee.id,
+          company_id: employee?.company_id,
+          employee_id: employee?.id,
           leave_type: newLeave.leave_type,
           start_date: newLeave.start_date,
           end_date: newLeave.end_date,
@@ -204,7 +213,7 @@ export default function EmployeeDashboard() {
     }
   };
 
-  if (loading) {
+  if (loading || !employee) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -227,7 +236,7 @@ export default function EmployeeDashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Employee Dashboard</h1>
-          <p className="text-slate-500 font-bold text-sm uppercase tracking-wider">Welcome back, {employee.name}</p>
+          <p className="text-slate-500 font-bold text-sm uppercase tracking-wider">Welcome back, {employee?.name}</p>
         </div>
         <div className="flex items-center gap-3">
           <button 

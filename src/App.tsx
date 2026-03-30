@@ -24,11 +24,13 @@ import Connection from './pages/Connection';
 import GmailIntegration from './pages/GmailIntegration';
 import WhatsAppIntegration from './pages/WhatsAppIntegration';
 import EmployerDashboard from './pages/employer/EmployerDashboard';
-import Attendance from './pages/employer/Attendance';
 import Department from './pages/employer/Department';
 import Designation from './pages/employer/Designation';
 import Employee from './pages/employer/Employee';
 import Leave from './pages/employer/Leave';
+import Attendance from './pages/employer/Attendance';
+import AttendanceSummary from './pages/employer/AttendanceSummary';
+import Shifts from './pages/employer/Shifts';
 import Payroll from './pages/employer/Payroll';
 import CompanyPayroll from './pages/employer/payroll/CompanyPayroll';
 import SalaryAdvance from './pages/employer/payroll/SalaryAdvance';
@@ -37,7 +39,6 @@ import ManageEmployeeSalary from './pages/employer/payroll/ManageEmployeeSalary'
 import SalarySlip from './pages/employer/payroll/SalarySlip';
 import PayrollPostingSheet from './pages/employer/payroll/PayrollPostingSheet';
 import EmployeeSalaryChart from './pages/employer/payroll/EmployeeSalaryChart';
-import Shifts from './pages/employer/Shifts';
 import Performance from './pages/employer/Performance';
 import Recruitment from './pages/employer/Recruitment';
 import JobsList from './pages/employer/JobsList';
@@ -46,7 +47,6 @@ import Training from './pages/employer/Training';
 import Assets from './pages/employer/Assets';
 import AssetTypes from './pages/employer/AssetTypes';
 import ItemRequests from './pages/employer/ItemRequests';
-import Expenses from './pages/employer/Expenses';
 import Reports from './pages/employer/Reports';
 import Settings from './pages/employer/Settings';
 import OrgChart from './pages/employer/OrgChart';
@@ -79,7 +79,6 @@ import EmployerPermissions from './pages/EmployerPermissions';
 import CompanyAdminLogin from './pages/CompanyAdminLogin';
 import CompanyAdminDashboard from './pages/CompanyAdminDashboard';
 import CompanyAdminLayout from './components/CompanyAdminLayout';
-import CompanyAdminAttendance from './pages/CompanyAdminAttendance';
 import CompanyAdminDepartment from './pages/CompanyAdminDepartment';
 import CompanyAdminDesignation from './pages/CompanyAdminDesignation';
 import CompanyAdminEmployee from './pages/CompanyAdminEmployee';
@@ -88,12 +87,12 @@ import AdminMonitoringDashboard from './pages/AdminMonitoringDashboard';
 import MonitoringReports from './pages/MonitoringReports';
 import EmployeeMonitoringReport from './pages/EmployeeMonitoringReport';
 import EmployeeLayout from './components/EmployeeLayout';
-import EmployeeAttendance from './pages/EmployeeAttendance';
 import EmployeeLeaves from './pages/EmployeeLeaves';
 import EmployeePayroll from './pages/EmployeePayroll';
 import EmployeeLogin from './pages/EmployeeLogin';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import EmployeeAssetPage from './pages/employee/EmployeeAssetPage';
+import EmployeeAttendance from './pages/employee/EmployeeAttendance';
 import EmployeeItemRequest from './pages/EmployeeItemRequest';
 import EmployeeMonitoring from './pages/employee/EmployeeMonitoring';
 import GuestJoin from './pages/GuestJoin';
@@ -148,6 +147,8 @@ function App() {
         <Route path="/super-admin/employer/designation" element={<Designation />} />
         <Route path="/super-admin/employer/employee" element={<Employee />} />
         <Route path="/super-admin/employer/attendance" element={<Attendance />} />
+        <Route path="/super-admin/employer/attendance/summary" element={<AttendanceSummary />} />
+        <Route path="/super-admin/employer/attendance/shifts" element={<Shifts />} />
         <Route path="/super-admin/employer/award" element={<Award />} />
         <Route path="/super-admin/employer/leaves" element={<Leave />} />
         <Route path="/super-admin/employer/payroll" element={<Payroll />} />
@@ -159,7 +160,6 @@ function App() {
         <Route path="/super-admin/employer/payroll/posting-sheet/:id" element={<PayrollPostingSheet />} />
         <Route path="/super-admin/employer/payroll/salary-chart/:id" element={<EmployeeSalaryChart />} />
         <Route path="/super-admin/employer/payroll/sales-tax" element={<Payroll />} />
-        <Route path="/super-admin/employer/shifts" element={<Shifts />} />
         <Route path="/super-admin/employer/performance" element={<Performance />} />
         <Route path="/super-admin/employer/recruitment" element={<Recruitment />} />
         <Route path="/super-admin/employer/recruitment/jobs-list" element={<JobsList />} />
@@ -188,7 +188,6 @@ function App() {
         <Route path="/super-admin/employer/assets" element={<Assets />} />
         <Route path="/super-admin/employer/assets/types" element={<AssetTypes />} />
         <Route path="/super-admin/employer/assets/requests" element={<ItemRequests />} />
-        <Route path="/super-admin/employer/expenses" element={<Expenses />} />
         <Route path="/super-admin/employer/notice-board" element={<NoticeBoard />} />
         <Route path="/super-admin/employer/projects" element={<ProjectManagement />} />
         <Route path="/super-admin/employer/projects/list" element={<ProjectManagement />} />
@@ -210,7 +209,6 @@ function App() {
         <Route path="/company-admin" element={<CompanyAdminLogin />} />
         <Route path="/company-admin" element={<CompanyAdminLayout />}>
           <Route path="dashboard" element={<CompanyAdminDashboard />} />
-          <Route path="attendance" element={<CompanyAdminAttendance />} />
           <Route path="department" element={<CompanyAdminDepartment />} />
           <Route path="designation" element={<CompanyAdminDesignation />} />
           <Route path="employee" element={<CompanyAdminEmployee />} />
@@ -218,6 +216,9 @@ function App() {
           <Route path="monitoring/reports" element={<MonitoringReports />} />
           <Route path="monitoring/reports/:employeeId" element={<EmployeeMonitoringReport />} />
           <Route path="award" element={<CompanyAdminAward />} />
+          <Route path="attendance" element={<Attendance />} />
+          <Route path="attendance/summary" element={<AttendanceSummary />} />
+          <Route path="attendance/shifts" element={<Shifts />} />
           <Route path="leaves" element={<Leave />} />
           <Route path="payroll" element={<Payroll />} />
           <Route path="payroll/company-payroll" element={<CompanyPayroll />} />
@@ -228,7 +229,6 @@ function App() {
           <Route path="payroll/posting-sheet/:id" element={<PayrollPostingSheet />} />
           <Route path="payroll/salary-chart/:id" element={<EmployeeSalaryChart />} />
           <Route path="payroll/sales-tax" element={<Payroll />} />
-          <Route path="shifts" element={<Shifts />} />
           <Route path="performance" element={<Performance />} />
           <Route path="recruitment" element={<Recruitment />} />
           <Route path="recruitment/jobs-list" element={<JobsList />} />
@@ -255,7 +255,6 @@ function App() {
           <Route path="offboarding/nda-reminder" element={<NDAReminder />} />
           <Route path="training" element={<Training />} />
           <Route path="assets" element={<Assets />} />
-          <Route path="expenses" element={<Expenses />} />
           <Route path="notice-board" element={<NoticeBoard />} />
           <Route path="projects" element={<ProjectManagement />} />
           <Route path="projects/list" element={<ProjectManagement />} />
@@ -282,10 +281,10 @@ function App() {
         <Route path="/guest/join/:token" element={<GuestJoin />} />
         <Route path="/employee" element={<EmployeeLayout />}>
           <Route path="dashboard" element={<EmployeeDashboard />} />
-          <Route path="attendance" element={<EmployeeAttendance />} />
           <Route path="notice-board" element={<NoticeBoard isAdmin={false} />} />
           <Route path="leaves" element={<EmployeeLeaves />} />
           <Route path="payroll" element={<EmployeePayroll />} />
+          <Route path="attendance" element={<EmployeeAttendance />} />
           <Route path="monitoring" element={<EmployeeMonitoring />} />
           <Route path="assets" element={<EmployeeAssetPage />} />
           <Route path="assets/request" element={<EmployeeItemRequest />} />

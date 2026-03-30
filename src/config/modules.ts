@@ -1,6 +1,5 @@
 import { 
   LayoutDashboard, 
-  Clock, 
   Network, 
   CalendarCheck, 
   Award, 
@@ -65,7 +64,17 @@ export const employerModules: ModuleItem[] = [
       { name: 'COMPANY POLICY', path: '/policy' },
     ]
   },
-  { name: 'ATTENDANCE', icon: CalendarCheck, path: '/super-admin/employer/attendance' },
+  { 
+    name: 'ATTENDANCE', 
+    icon: CalendarCheck, 
+    path: '/super-admin/employer/attendance',
+    hasDropdown: true,
+    subItems: [
+      { name: 'ATTENDANCE', path: '' },
+      { name: 'ATTENDANCE SUMMARY', path: '/summary' },
+      { name: 'SHIFTS', path: '/shifts' },
+    ]
+  },
   { name: 'AWARD', icon: Award, path: '/super-admin/employer/award' },
   { name: 'DEPARTMENT', icon: Building2, path: '/super-admin/employer/department' },
   { name: 'DESIGNATION', icon: Users, path: '/super-admin/employer/designation' },
@@ -116,7 +125,6 @@ export const employerModules: ModuleItem[] = [
     ]
   },
   { name: 'LEAVES', icon: CalendarOff, path: '/super-admin/employer/leaves' },
-  { name: 'SHIFTS', icon: Clock, path: '/super-admin/employer/shifts' },
   { name: 'NOTICE BOARD', icon: Bell, path: '/super-admin/employer/notice-board' },
   { 
     name: 'PAYROLL', 
@@ -143,7 +151,6 @@ export const employerModules: ModuleItem[] = [
       { name: 'ITEM REQUESTS', path: '/requests' },
     ]
   },
-  { name: 'EXPENSES', icon: Receipt, path: '/super-admin/employer/expenses' },
   { 
     name: 'PROJECT MANAGEMENT', 
     icon: ClipboardList, 

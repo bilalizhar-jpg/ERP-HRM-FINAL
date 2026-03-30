@@ -16,6 +16,8 @@ import {
   Wand2
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
+import { User } from '../types';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 // Initialize Gemini
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
@@ -71,7 +73,28 @@ export default function GlobalAIAssistant() {
   const [showHistory, setShowHistory] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const currentUser = JSON.parse(localStorage.getItem('employee') || localStorage.getItem('admin') || '{}');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const employeeId = localStorage.getItem('employeeId');
+    const adminData = localStorage.getItem('admin');
+
+    if (employeeId) {
+      fetchWithRetry(`/api/employees/${employeeId}`)
+        .then(async res => {
+          if (!res.ok) throw new Error(await res.text());
+          return res.json();
+        })
+        .then(data => {
+          if (data.success) {
+            setCurrentUser(data.employee);
+          }
+        })
+        .catch(err => console.error("Error fetching employee for AI assistant:", err));
+    } else if (adminData) {
+      setCurrentUser(JSON.parse(adminData));
+    }
+  }, []);
 
   useEffect(() => {
     const path = location.pathname;
@@ -123,9 +146,9 @@ export default function GlobalAIAssistant() {
   };
 
   const saveToHistory = async () => {
-    if (!aiOutput || !currentUser.id) return;
+    if (!aiOutput || !currentUser?.id) return;
     try {
-      await fetch('/api/ai/history', {
+      await fetchWithRetry('/api/ai/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -142,9 +165,9 @@ export default function GlobalAIAssistant() {
   };
 
   const fetchHistory = async () => {
-    if (!currentUser.id) return;
+    if (!currentUser?.id) return;
     try {
-      const res = await fetch(`/api/ai/history/${currentUser.id}`);
+      const res = await fetchWithRetry(`/api/ai/history/${currentUser.id}`);
       const data = await res.json();
       setHistory(data);
       setShowHistory(true);

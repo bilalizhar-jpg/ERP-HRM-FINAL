@@ -14,6 +14,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { InvoiceTemplate } from '../components/InvoiceTemplate';
 import SuperAdminSidebar from '../components/SuperAdminSidebar';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 interface Invoice {
   id: number;
@@ -36,7 +37,7 @@ export default function Invoices() {
 
   const fetchInvoices = async () => {
     try {
-      const res = await fetch('/api/invoices');
+      const res = await fetchWithRetry('/api/invoices');
       if (res.ok) {
         const data = await res.json();
         const formattedInvoices = data.map((invoice: Invoice) => ({
@@ -59,7 +60,7 @@ export default function Invoices() {
   const handleSendEmail = async (invoice: Invoice) => {
     setSendingId(invoice.id);
     try {
-      const res = await fetch(`/api/invoices/${invoice.id}/send`, { method: 'POST' });
+      const res = await fetchWithRetry(`/api/invoices/${invoice.id}/send`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         alert(data.message);

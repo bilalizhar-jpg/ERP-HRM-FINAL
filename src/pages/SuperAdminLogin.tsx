@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Home, Lock, User } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 export default function SuperAdminLogin() {
   const [email, setEmail] = useState('');
@@ -20,7 +21,7 @@ export default function SuperAdminLogin() {
     e.preventDefault();
     setError('');
     try {
-      const res = await fetch('/api/super-admin/login', {
+      const res = await fetchWithRetry('/api/super-admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })

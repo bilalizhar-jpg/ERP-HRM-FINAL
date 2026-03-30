@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import SuperAdminSidebar from '../components/SuperAdminSidebar';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 interface Company {
   id: number;
@@ -56,7 +57,7 @@ export default function ManageCompanies() {
 
   const fetchCompanies = async () => {
     try {
-      const res = await fetch('/api/companies');
+      const res = await fetchWithRetry('/api/companies');
       if (res.ok) {
         const data = await res.json();
         setCompanies(data);
@@ -76,7 +77,7 @@ export default function ManageCompanies() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/companies', {
+      const res = await fetchWithRetry('/api/companies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -110,7 +111,7 @@ export default function ManageCompanies() {
 
   const handleConnectGmail = async (companyId: number) => {
     try {
-      const res = await fetch(`/api/gmail/auth-url?companyId=${companyId}`);
+      const res = await fetchWithRetry(`/api/gmail/auth-url?companyId=${companyId}`);
       const data = await res.json();
       if (data.url) {
         window.open(data.url, '_blank');
@@ -130,7 +131,7 @@ export default function ManageCompanies() {
     console.log("Delete button clicked for company ID:", id);
     if (confirm("Are you sure you want to delete this company?")) {
       try {
-        const res = await fetch(`/api/companies/${id}`, { method: 'DELETE' });
+        const res = await fetchWithRetry(`/api/companies/${id}`, { method: 'DELETE' });
         const data = await res.json();
         console.log("Delete response:", data);
         if (data.success) {
@@ -437,7 +438,7 @@ export default function ManageCompanies() {
                 e.preventDefault();
                 setIsSubmitting(true);
                 try {
-                  const res = await fetch(`/api/companies/${editingCompany.id}`, {
+                  const res = await fetchWithRetry(`/api/companies/${editingCompany.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(editingCompany)

@@ -7,6 +7,8 @@ import { DndContext, closestCorners, KeyboardSensor, PointerSensor, useSensor, u
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
+
 interface Project {
   id?: number;
   company_name: string;
@@ -222,7 +224,7 @@ export default function ProjectManagement() {
   const fetchProjects = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/projects');
+      const res = await fetchWithRetry('/api/projects');
       if (res.ok) {
         const data = await res.json();
         setProjects(data);
@@ -237,7 +239,7 @@ export default function ProjectManagement() {
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/tasks');
+      const res = await fetchWithRetry('/api/tasks');
       if (res.ok) {
         const data = await res.json();
         // Parse JSON strings if necessary
@@ -263,9 +265,9 @@ export default function ProjectManagement() {
     setIsTaskModalOpen(true);
     try {
       const [activitiesRes, labelsRes, employeesRes] = await Promise.all([
-        fetch(`/api/tasks/${task.id}/activities`),
-        fetch(`/api/tasks/labels`),
-        fetch(`/api/employees`),
+        fetchWithRetry(`/api/tasks/${task.id}/activities`),
+        fetchWithRetry(`/api/tasks/labels`),
+        fetchWithRetry(`/api/employees`),
       ]);
 
       if (activitiesRes.ok) setTaskActivities(await activitiesRes.json());
@@ -278,7 +280,7 @@ export default function ProjectManagement() {
 
   const updateTaskField = async (taskId: number, field: string, value: string | string[] | number) => {
     try {
-      const res = await fetch(`/api/tasks/${taskId}`, {
+      const res = await fetchWithRetry(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value })
@@ -296,7 +298,7 @@ export default function ProjectManagement() {
 
   const handleCreateLabel = async (name: string, color: string) => {
     try {
-      const res = await fetch('/api/tasks/labels', {
+      const res = await fetchWithRetry('/api/tasks/labels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, color })
@@ -314,7 +316,7 @@ export default function ProjectManagement() {
     if (!selectedTask || !newComment.trim()) return;
 
     try {
-      const res = await fetch(`/api/tasks/${selectedTask.id}/activities`, {
+      const res = await fetchWithRetry(`/api/tasks/${selectedTask.id}/activities`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -378,7 +380,7 @@ export default function ProjectManagement() {
 
   const updateTaskStatus = async (taskId: number, status: string) => {
     try {
-      await fetch(`/api/tasks/${taskId}/status`, {
+      await fetchWithRetry(`/api/tasks/${taskId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -392,7 +394,7 @@ export default function ProjectManagement() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch('/api/projects', {
+      const res = await fetchWithRetry('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

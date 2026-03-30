@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 export default function Navbar() {
   const [showModal, setShowModal] = useState(false);
@@ -10,7 +11,7 @@ export default function Navbar() {
   const [email, setEmail] = useState('');
 
   const handleSubmit = async () => {
-    await fetch('/api/request-demo', {
+    await fetchWithRetry('/api/request-demo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, date: startDate }),

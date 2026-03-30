@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Edit2, Trash2, FileSpreadsheet, FileText, XCircle, Filter, Search, Shield, Upload, User, Settings } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
 
 interface Employee {
   id: number;
@@ -105,7 +106,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
   const fetchEmployees = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/employees?company_id=${companyId}`);
+      const res = await fetchWithRetry(`/api/employees?company_id=${companyId}`);
       if (res.ok) {
         const data = await res.json();
         const parsedData = data.map((emp: { custom_fields: string | string[] }) => ({
@@ -124,8 +125,8 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
   const fetchDepartmentsAndDesignations = useCallback(async () => {
     try {
       const [deptRes, desigRes] = await Promise.all([
-        fetch(`/api/departments?company_id=${companyId}`),
-        fetch(`/api/designations?company_id=${companyId}`)
+        fetchWithRetry(`/api/departments?company_id=${companyId}`),
+        fetchWithRetry(`/api/designations?company_id=${companyId}`)
       ]);
       
       if (deptRes.ok) {
@@ -194,7 +195,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
         joining_date: formData.joining_date ? new Date(formData.joining_date).toISOString().split('T')[0] : null,
       };
 
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -254,7 +255,7 @@ export default function EmployeeModule({ companyId }: EmployeeModuleProps) {
     if (!deleteConfirmId) return;
     
     try {
-      const res = await fetch(`/api/employees/${deleteConfirmId}`, {
+      const res = await fetchWithRetry(`/api/employees/${deleteConfirmId}`, {
         method: 'DELETE'
       });
       

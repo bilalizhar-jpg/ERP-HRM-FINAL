@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { employerModules, SubItem } from '../config/modules';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 export default function SuperAdminSidebar() {
   const navigate = useNavigate();
@@ -29,7 +30,7 @@ export default function SuperAdminSidebar() {
 
   const handleExitToSite = async () => {
     try {
-      await fetch('/api/logout', { method: 'POST' });
+      await fetchWithRetry('/api/logout', { method: 'POST' });
     } catch (err) {
       console.error("Logout error:", err);
     }

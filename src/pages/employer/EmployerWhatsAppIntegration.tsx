@@ -12,6 +12,7 @@ import {
   Loader2,
   Trash2
 } from 'lucide-react';
+import { fetchWithRetry } from '../../utils/fetchWithRetry';
 
 interface WhatsAppStatus {
   status: 'connected' | 'disconnected' | 'connecting';
@@ -58,7 +59,7 @@ export default function EmployerWhatsAppIntegration() {
   const fetchStatus = useCallback(async () => {
     if (!companyId) return;
     try {
-      const res = await fetch(`/api/whatsapp/status?companyId=${companyId}`);
+      const res = await fetchWithRetry(`/api/whatsapp/status?companyId=${companyId}`);
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
@@ -71,7 +72,7 @@ export default function EmployerWhatsAppIntegration() {
   const fetchAttendanceSettings = useCallback(async () => {
     if (!companyId) return;
     try {
-      const res = await fetch(`/api/whatsapp/attendance-settings?companyId=${companyId}`);
+      const res = await fetchWithRetry(`/api/whatsapp/attendance-settings?companyId=${companyId}`);
       if (res.ok) {
         const data = await res.json();
         if (data) {
@@ -90,7 +91,7 @@ export default function EmployerWhatsAppIntegration() {
   const fetchWelcomeSettings = useCallback(async () => {
     if (!companyId) return;
     try {
-      const res = await fetch(`/api/whatsapp/employee-welcome-settings?companyId=${companyId}`);
+      const res = await fetchWithRetry(`/api/whatsapp/employee-welcome-settings?companyId=${companyId}`);
       if (res.ok) {
         const data = await res.json();
         if (data) {
@@ -106,7 +107,7 @@ export default function EmployerWhatsAppIntegration() {
   const fetchIdleSettings = useCallback(async () => {
     if (!companyId) return;
     try {
-      const res = await fetch(`/api/whatsapp/idle-alert-settings?companyId=${companyId}`);
+      const res = await fetchWithRetry(`/api/whatsapp/idle-alert-settings?companyId=${companyId}`);
       if (res.ok) {
         const data = await res.json();
         if (data) {
@@ -136,7 +137,7 @@ export default function EmployerWhatsAppIntegration() {
     if (!companyId) return;
     setIsSavingWelcomeSettings(true);
     try {
-      const res = await fetch('/api/whatsapp/employee-welcome-settings', {
+      const res = await fetchWithRetry('/api/whatsapp/employee-welcome-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -162,7 +163,7 @@ export default function EmployerWhatsAppIntegration() {
     if (!companyId) return;
     setIsSavingIdleSettings(true);
     try {
-      const res = await fetch('/api/whatsapp/idle-alert-settings', {
+      const res = await fetchWithRetry('/api/whatsapp/idle-alert-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -189,7 +190,7 @@ export default function EmployerWhatsAppIntegration() {
     if (!companyId) return;
     setIsSavingSettings(true);
     try {
-      const res = await fetch('/api/whatsapp/attendance-settings', {
+      const res = await fetchWithRetry('/api/whatsapp/attendance-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -218,7 +219,7 @@ export default function EmployerWhatsAppIntegration() {
     if (!companyId) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/whatsapp/connect', {
+      const res = await fetchWithRetry('/api/whatsapp/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyId })
@@ -242,7 +243,7 @@ export default function EmployerWhatsAppIntegration() {
     if (!confirm('Are you sure you want to disconnect WhatsApp?')) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/whatsapp/disconnect', {
+      const res = await fetchWithRetry('/api/whatsapp/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyId })
@@ -261,7 +262,7 @@ export default function EmployerWhatsAppIntegration() {
     if (!companyId || !testNumber || !testMessage) return;
     setIsSending(true);
     try {
-      const res = await fetch('/api/whatsapp/send', {
+      const res = await fetchWithRetry('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

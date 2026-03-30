@@ -11,6 +11,7 @@ import {
 import { motion } from 'framer-motion';
 
 import SuperAdminSidebar from '../components/SuperAdminSidebar';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 interface Company {
   id: number;
@@ -34,19 +35,21 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     const checkDb = async () => {
       try {
-        const res = await fetch('/api/db-health');
-        const data = await res.json();
-        setDbStatus(data);
-        
-        if (data.status === 'connected' && data.isInitialized) {
-          // Fetch stats and recent companies
-          const [statsRes, companiesRes] = await Promise.all([
-            fetch('/api/super-admin/stats'),
-            fetch('/api/super-admin/recent-companies')
-          ]);
+        const res = await fetchWithRetry('/api/db-health');
+        if (res.ok) {
+          const data = await res.json();
+          setDbStatus(data);
           
-          if (statsRes.ok) setStats(await statsRes.json());
-          if (companiesRes.ok) setRecentCompanies(await companiesRes.json());
+          if (data.status === 'connected' && data.isInitialized) {
+            // Fetch stats and recent companies
+            const [statsRes, companiesRes] = await Promise.all([
+              fetchWithRetry('/api/super-admin/stats'),
+              fetchWithRetry('/api/super-admin/recent-companies')
+            ]);
+            
+            if (statsRes.ok) setStats(await statsRes.json());
+            if (companiesRes.ok) setRecentCompanies(await companiesRes.json());
+          }
         }
       } catch {
         setDbStatus({ status: 'error', message: 'Failed to check database status.' });
@@ -220,7 +223,7 @@ export default function SuperAdminDashboard() {
                     onClick={async () => {
                       try {
                         setLoading(true);
-                        const res = await fetch('/api/init-db', { method: 'POST' });
+                        const res = await fetchWithRetry('/api/init-db', { method: 'POST' });
                         const data = await res.json();
                         if (data.success) window.location.reload();
                         else alert("Failed to initialize: " + data.message);

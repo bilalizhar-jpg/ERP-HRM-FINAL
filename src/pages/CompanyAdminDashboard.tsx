@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Settings, Users, Calendar, Clock, Briefcase, TrendingUp, AlertCircle } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 interface DashboardStats {
   totalEmployees: number;
@@ -115,7 +116,7 @@ export default function CompanyAdminDashboard() {
           const company = JSON.parse(companyStr);
           
           // Fetch stats
-          const statsRes = await fetch(`/api/company-admin/dashboard-stats?company_id=${company.id}`);
+          const statsRes = await fetchWithRetry(`/api/company-admin/dashboard-stats?company_id=${company.id}`);
           if (statsRes.ok) {
             const statsData = await statsRes.json();
             setStats(statsData);

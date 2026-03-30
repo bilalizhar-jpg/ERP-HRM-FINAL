@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 export default function Hero() {
   const [showModal, setShowModal] = useState(false);
@@ -11,7 +12,7 @@ export default function Hero() {
   const [description, setDescription] = useState('');
 
   const handleSubmit = async () => {
-    await fetch('/api/request-demo', {
+    await fetchWithRetry('/api/request-demo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, description, date: startDate }),

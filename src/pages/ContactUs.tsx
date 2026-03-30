@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 export default function ContactUs() {
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
@@ -8,7 +9,7 @@ export default function ContactUs() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('/api/contact-us', {
+      const response = await fetchWithRetry('/api/contact-us', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
